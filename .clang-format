@@ -1,0 +1,4 @@
+AllowShortIfStatementsOnASingleLine: Always
+AllowShortLoopsOnASingleLine: true
+BreakTemplateDeclarations: Yes
+

@@ -1,0 +1,62 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default (Homebrew LLVM clang++)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER":          "/opt/homebrew/opt/llvm/bin/clang++",
+        "CMAKE_BUILD_TYPE":            "Debug",
+        "CMAKE_PREFIX_PATH":           "/opt/homebrew",
+        "CMAKE_AR":                    "/usr/bin/ar",
+        "CMAKE_RANLIB":                "/usr/bin/ranlib",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug (Homebrew LLVM clang++)",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "tests",
+      "displayName": "Test (Homebrew LLVM clang++)",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ANVIL_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "displayName": "Build (debug)",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "tests",
+      "displayName": "Build tests",
+      "configurePreset": "tests"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "tests",
+      "displayName": "Run tests",
+      "configurePreset": "tests",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    }
+  ]
+}
