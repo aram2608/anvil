@@ -42,12 +42,12 @@ public:
   friend void DispatchLexColon(Lexer &lex);
   friend void DispatchLexWhiteSpace(Lexer &lex);
   friend void DispatchLexNewLine(Lexer &lex);
-  friend void DispatchLeftParen(Lexer &lex);
-  friend void DispatchLeftBracket(Lexer &lex);
-  friend void DispatchLeftBrace(Lexer &lex);
-  friend void DispatchRightParen(Lexer &lex);
-  friend void DispatchRightBracket(Lexer &lex);
-  friend void DispatchRightBrace(Lexer &lex);
+  friend void DispatchLexLeftParen(Lexer &lex);
+  friend void DispatchLexLeftBracket(Lexer &lex);
+  friend void DispatchLexLeftBrace(Lexer &lex);
+  friend void DispatchLexRightParen(Lexer &lex);
+  friend void DispatchLexRightBracket(Lexer &lex);
+  friend void DispatchLexRightBrace(Lexer &lex);
 };
 
 #endif

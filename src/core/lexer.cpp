@@ -105,21 +105,25 @@ void DispatchLexWhiteSpace(Lexer &lex) {}
 
 void DispatchLexNewLine(Lexer &lex) {}
 
-void DispatchLeftParen(Lexer &lex) { lex.PushToken(Token::Kind::LeftParen); }
+void DispatchLexLeftParen(Lexer &lex) { lex.PushToken(Token::Kind::LeftParen); }
 
-void DispatchLeftBracket(Lexer &lex) {
+void DispatchLexLeftBracket(Lexer &lex) {
   lex.PushToken(Token::Kind::LeftBracket);
 }
 
-void DispatchLeftBrace(Lexer &lex) { lex.PushToken(Token::Kind::LeftBrace); }
+void DispatchLexLeftBrace(Lexer &lex) { lex.PushToken(Token::Kind::LeftBrace); }
 
-void DispatchRightParen(Lexer &lex) { lex.PushToken(Token::Kind::RightParen); }
+void DispatchLexRightParen(Lexer &lex) {
+  lex.PushToken(Token::Kind::RightParen);
+}
 
-void DispatchRightBracket(Lexer &lex) {
+void DispatchLexRightBracket(Lexer &lex) {
   lex.PushToken(Token::Kind::RightBracket);
 }
 
-void DispatchRightBrace(Lexer &lex) { lex.PushToken(Token::Kind::RightBrace); }
+void DispatchLexRightBrace(Lexer &lex) {
+  lex.PushToken(Token::Kind::RightBrace);
+}
 
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
@@ -138,10 +142,12 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table[' '] = &DispatchLexWhiteSpace;
   table['\t'] = &DispatchLexWhiteSpace;
   table['\n'] = &DispatchLexNewLine;
-  table['('] = &DispatchLeftParen;
-  table[')'] = &DispatchRightParen;
-  table['['] = &DispatchLeftBracket;
-  table[']'] = &DispatchRightBracket;
+  table['('] = &DispatchLexLeftParen;
+  table[')'] = &DispatchLexRightParen;
+  table['['] = &DispatchLexLeftBracket;
+  table[']'] = &DispatchLexRightBracket;
+  table['{'] = &DispatchLexLeftBrace;
+  table['}'] = &DispatchLexRightBrace;
 
   // LeftBrace,
   // RightBrace,
