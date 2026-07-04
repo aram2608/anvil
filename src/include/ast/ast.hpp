@@ -23,6 +23,7 @@ public:
 
   const TokenBuffer &Tokens() const { return tokens_; }
   const NodeBuffer &Nodes() const { return nodes_; }
+  bool CheckErrors() const;
 };
 
 #endif
