@@ -15,15 +15,30 @@ Ast RunParser(const char *src) {
   return p.Parse();
 }
 
-TEST(Parser, ParseBinops) {
-  std::vector<Node::Kind> kCases = {
-      Node::Kind::Root,
-      Node::Kind::Int,
-      Node::Kind::Int,
-      Node::Kind::Add,
-  };
+void ExpectKinds(const char *src, std::vector<Node::Kind> expected) {
+  auto ast = RunParser(src);
+  auto kinds = ast.Nodes().Kinds();
 
-  auto ast = RunParser("1 + 1");
+  ASSERT_EQ(expected.size(), kinds.size());
+  for (unsigned int i = 0; i < expected.size(); i++) {
+    EXPECT_EQ(expected[i], kinds[i]) << "at index " << i;
+  }
+}
 
-  ASSERT_EQ(kCases.size(), ast.Nodes().Kinds().size());
+using K = Node::Kind;
+
+TEST(Parser, ParseAddition) {
+  ExpectKinds("1 + 1", {K::Root, K::Int, K::Int, K::Add});
+}
+
+TEST(Parser, ParseSubtraction) {
+  ExpectKinds("1 - 1", {K::Root, K::Int, K::Int, K::Sub});
+}
+
+TEST(Parser, ParseMultiplication) {
+  ExpectKinds("1 * 1", {K::Root, K::Int, K::Int, K::Mult});
+}
+
+TEST(Parser, ParseDivision) {
+  ExpectKinds("1 / 1", {K::Root, K::Int, K::Int, K::Div});
 }
