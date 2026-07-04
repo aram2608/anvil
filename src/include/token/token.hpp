@@ -40,6 +40,7 @@ struct Token {
     For,
     Else,
     While,
+    FuncDecl,
 
     LeftParen,
     RightParen,
@@ -50,11 +51,13 @@ struct Token {
     _Count,
   };
 
-  Token(Kind kind, int start, int len) : kind{kind}, start{start}, len{len} {}
+  Token(Kind kind, int start, int len, int line)
+      : kind{kind}, start{start}, len{len}, line{line} {}
 
   Kind kind;
   int start;
   int len;
+  int line;
 };
 
 #endif

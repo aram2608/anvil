@@ -41,7 +41,7 @@ struct Node {
     TokenAndNode,  // token_and_node
     TokenAndToken, // token_and_token
     ExtraRange,    // extra_range
-    std::nullptr_t // Undefined, acts as a sentinel of sorts
+    std::monostate // Undefined, acts as a sentinel of sorts
     >;
   // clang-format on
 

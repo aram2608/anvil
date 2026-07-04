@@ -52,7 +52,7 @@ void Parser::ParseRoot() {
   Node::Index root = AddNode({
       .kind = Node::Kind::Root,
       .main_token = {0},
-      .data = nullptr,
+      .data = std::monostate{},
   });
 
   const int scratch_top = scratch_.size();
@@ -131,14 +131,14 @@ Node::Index Parser::ParseAtom() {
     return AddNode({
         .kind = Node::Kind::Int,
         .main_token = Advance(),
-        .data = nullptr,
+        .data = std::monostate{},
     });
     break;
   case Token::Kind::Float:
     return AddNode({
         .kind = Node::Kind::Float,
         .main_token = Advance(),
-        .data = nullptr,
+        .data = std::monostate{},
     });
     break;
   default:
@@ -149,7 +149,7 @@ Node::Index Parser::ParseAtom() {
     return AddNode({
         .kind = Node::Kind::Undefined,
         .main_token = Previous(),
-        .data = nullptr,
+        .data = std::monostate{},
     });
   }
 }

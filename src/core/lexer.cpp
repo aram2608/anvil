@@ -38,9 +38,11 @@ static constexpr auto kKeyWords =
         {"else", Token::Kind::Else},
         {"while", Token::Kind::While},
         {"for", Token::Kind::For},
+        {"proc", Token::Kind::FuncDecl},
     })};
 
-Lexer::Lexer(std::string source) : source_{source}, start_(0), current_(0) {}
+Lexer::Lexer(std::string source)
+    : source_{source}, start_(0), current_(0), line_(1) {}
 
 std::vector<Token> Lexer::ScanTokens() {
   while (!IsEnd()) {
@@ -103,7 +105,7 @@ void DispatchLexDot(Lexer &lex) { lex.PushToken(Token::Kind::Dot); }
 
 void DispatchLexWhiteSpace(Lexer &lex) {}
 
-void DispatchLexNewLine(Lexer &lex) {}
+void DispatchLexNewLine(Lexer &lex) { lex.line_ += 1; }
 
 void DispatchLexLeftParen(Lexer &lex) { lex.PushToken(Token::Kind::LeftParen); }
 
@@ -181,7 +183,7 @@ void Lexer::Scan() {
 }
 
 void Lexer::PushToken(Token::Kind kind) {
-  tokens_.push_back({kind, start_, current_ - start_});
+  tokens_.push_back({kind, start_, current_ - start_, line_});
 }
 
 void Lexer::OpAssign(Token::Kind e, Token::Kind f) {

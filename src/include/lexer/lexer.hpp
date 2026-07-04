@@ -11,6 +11,7 @@ private:
   std::string_view source_; // Extern. owned data
   int current_;
   int start_;
+  int line_;
 
   void Scan();
   char Advance();

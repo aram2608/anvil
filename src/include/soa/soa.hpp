@@ -11,6 +11,7 @@ class TokenBuffer {
   std::vector<Token::Kind> kind_;
   std::vector<int> start_;
   std::vector<int> len_;
+  std::vector<int> line_;
 
 public:
   explicit TokenBuffer(std::vector<Token> &tokens);
