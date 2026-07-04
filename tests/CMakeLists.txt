@@ -8,8 +8,11 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
-add_executable(core_tests core/lexer_test.cpp)
+add_executable(core_tests
+    core/lexer_test.cpp
+    core/parser_test.cpp
+)
 
-target_link_libraries(core_tests PRIVATE core GTest::gtest_main)
+target_link_libraries(core_tests PRIVATE core utils GTest::gtest_main)
 
 gtest_discover_tests(core_tests)

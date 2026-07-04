@@ -8,6 +8,22 @@ std::vector<Token> RunLexer(std::string source) {
   return lex.ScanTokens();
 }
 
+TEST(Lexer, LexBangs) {
+  std::vector<Token::Kind> kCases = {
+      Token::Kind::Bang,
+      Token::Kind::BangEqual,
+      Token::Kind::EndOfFile,
+  };
+
+  std::vector<Token> tests = RunLexer("! !=");
+
+  ASSERT_EQ(kCases.size(), tests.size());
+
+  for (size_t i = 0; i < kCases.size(); i++) {
+    EXPECT_EQ(kCases[i], tests[i].kind);
+  }
+}
+
 TEST(Lexer, LexBinops) {
   std::vector<Token::Kind> kCases = {
       Token::Kind::Plus,  Token::Kind::Minus,     Token::Kind::Star,

@@ -125,6 +125,12 @@ void DispatchLexRightBrace(Lexer &lex) {
   lex.PushToken(Token::Kind::RightBrace);
 }
 
+void DispatchLexBang(Lexer &lex) {
+  lex.OpAssign(Token::Kind::BangEqual, Token::Kind::Bang);
+}
+
+void DispatchLexSemiColon(Lexer &lex) { lex.PushToken(Token::Kind::SemiColon); }
+
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
 
@@ -148,6 +154,8 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table[']'] = &DispatchLexRightBracket;
   table['{'] = &DispatchLexLeftBrace;
   table['}'] = &DispatchLexRightBrace;
+  table[';'] = &DispatchLexSemiColon;
+  table['!'] = &DispatchLexBang;
 
   // LeftBrace,
   // RightBrace,
@@ -220,7 +228,7 @@ bool Lexer::InNumber() {
 
 bool Lexer::IsEnd() { return current_ >= source_.length(); }
 
-std::string Lexer::Slice() {
+std::string_view Lexer::Slice() {
   int len = current_ - start_;
   return source_.substr(start_, len);
 }

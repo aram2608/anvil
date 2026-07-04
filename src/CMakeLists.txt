@@ -1,6 +1,7 @@
 set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_subdirectory(core)
+add_subdirectory(utils)
 
 add_executable(anvil main.cpp)
 
@@ -19,5 +20,5 @@ target_compile_definitions(anvil
 
 target_include_directories(anvil PRIVATE ${INCLUDE_DIR})
 
-target_link_libraries(anvil PRIVATE core)
+target_link_libraries(anvil PRIVATE core utils)
 

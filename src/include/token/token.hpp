@@ -9,6 +9,7 @@ struct Token {
     Slash,
     Star,
     Equal,
+    Bang,
     ColonEqual,
     PlusEqual,
     MinusEqual,
@@ -30,6 +31,7 @@ struct Token {
 
     // Other
     Colon,
+    SemiColon,
     Error,
     Identifier,
     EndOfFile,
@@ -45,6 +47,7 @@ struct Token {
     RightBracket,
     LeftBrace,
     RightBrace,
+    _Count,
   };
 
   Token(Kind kind, int start, int len) : kind{kind}, start{start}, len{len} {}

@@ -2,12 +2,13 @@
 #define LEXER_HPP_
 #include "token/token.hpp"
 #include <string>
+#include <string_view>
 #include <vector>
 
 class Lexer {
 private:
   std::vector<Token> tokens_;
-  std::string source_;
+  std::string_view source_; // Extern. owned data
   int current_;
   int start_;
 
@@ -21,10 +22,10 @@ private:
   void OpAssign(Token::Kind expected, Token::Kind fallback);
   bool IsEnd();
   bool InNumber();
-  std::string Slice();
+  std::string_view Slice();
 
 public:
-  Lexer(std::string source);
+  Lexer(std::string sourc);
   std::vector<Token> ScanTokens();
 
   // OOP is a bit of a scam I suppose
@@ -48,6 +49,8 @@ public:
   friend void DispatchLexRightParen(Lexer &lex);
   friend void DispatchLexRightBracket(Lexer &lex);
   friend void DispatchLexRightBrace(Lexer &lex);
+  friend void DispatchLexSemiColon(Lexer &lex);
+  friend void DispatchLexBang(Lexer &lex);
 };
 
 #endif
