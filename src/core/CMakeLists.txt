@@ -3,6 +3,8 @@ add_library(core STATIC
     parser.cpp
     ast.cpp
     compiler.cpp
+    vm.cpp
+    dis.cpp
 )
 
 target_include_directories(core PUBLIC ${INCLUDE_DIR})

@@ -1,4 +1,6 @@
 #include "ast/ast.hpp"
+#include "compiler/compiler.hpp"
+#include "dis/dis.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
 #include <cstdlib>
@@ -28,6 +30,9 @@ int main(int argc, char **argv) {
       if (ast.CheckErrors()) {
         return 1;
       }
+      Compiler c{source, ast};
+      Block b = c.Compile();
+      std::cout << Dis::Disassemble(b);
     } else {
       std::cout << argv[1] << " could not be opened\n";
     }

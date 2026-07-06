@@ -2,8 +2,9 @@
 #include <iostream>
 
 Ast::Ast(std::string_view source, TokenBuffer tokens, NodeBuffer nodes,
-         std::vector<ParseError> errors)
-    : source_{source}, tokens_{tokens}, nodes_{nodes}, errors_{errors} {}
+         std::vector<unsigned int> extra_data, std::vector<ParseError> errors)
+    : source_{source}, tokens_{tokens}, nodes_{nodes}, extra_data_{extra_data},
+      errors_{errors} {}
 
 bool Ast::CheckErrors() const {
   if (errors_.size() > 0) {

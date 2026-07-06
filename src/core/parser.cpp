@@ -5,6 +5,8 @@
 #include <cassert>
 #include <cstddef>
 
+namespace {
+
 struct OprData {
   int8_t left = -1;
   int8_t right = -1;
@@ -40,12 +42,14 @@ OprData GetPrec(Token::Kind kind) {
   return kPrecs[static_cast<std::size_t>(kind)];
 }
 
+} // namespace
+
 Parser::Parser(std::string source, std::vector<Token> tokens)
     : source_{source}, tokens_{tokens}, current_{0} {}
 
 Ast Parser::Parse() {
   ParseRoot();
-  return {source_, tokens_, NodeBuffer{nodes_}, errors_};
+  return {source_, tokens_, NodeBuffer{nodes_}, extra_data_, errors_};
 }
 
 void Parser::ParseRoot() {
@@ -71,7 +75,9 @@ void Parser::ParseStatements() {
     // TOOD: Add blocks
     break;
   default:
-    ParseExpression();
+    // TODO: A bit of a hack to get expressions going
+    // fix later on
+    scratch_.push_back(ParseExpression());
     break;
   }
 }

@@ -46,6 +46,7 @@ struct Node {
   // clang-format on
 
   enum class Kind {
+    // Keep in the same order as Op::Kind for the compiler
     Root,
     Add,
     Sub,

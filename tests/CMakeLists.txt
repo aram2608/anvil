@@ -11,6 +11,7 @@ include(GoogleTest)
 add_executable(core_tests
     core/lexer_test.cpp
     core/parser_test.cpp
+    core/compiler_test.cpp
 )
 
 target_link_libraries(core_tests PRIVATE core utils GTest::gtest_main)
