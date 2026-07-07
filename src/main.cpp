@@ -3,6 +3,7 @@
 #include "dis/dis.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "vm/vm.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -33,6 +34,8 @@ int main(int argc, char **argv) {
       Compiler c{source, ast};
       Block b = c.Compile();
       std::cout << Dis::Disassemble(b);
+      VM vm{b};
+      vm.Run();
     } else {
       std::cout << argv[1] << " could not be opened\n";
     }

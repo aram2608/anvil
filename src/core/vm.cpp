@@ -2,6 +2,7 @@
 #include "compiler/bytecode.hpp"
 #include "vm/object.hpp"
 #include <cassert>
+#include <exception>
 #include <functional>
 
 namespace {
@@ -57,7 +58,7 @@ Object::Value VM::MockRun() {
       break;
     case Code::Op::Div: {
       Object::Value b = regs_[Code::GetC(i)];
-      if (Object::isZero(b)) return;
+      if (Object::isZero(b)) throw std::exception{};
       regs_[Code::GetA(i)] =
           Arith(regs_[Code::GetB(i)], regs_[Code::GetC(i)], std::divides<>{});
     } break;
