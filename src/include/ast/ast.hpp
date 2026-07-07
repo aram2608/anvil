@@ -8,7 +8,7 @@
 #include <vector>
 
 struct ParseError {
-  enum class Kind { UnexpectedToken };
+  enum class Kind { UnexpectedToken, MissingSemicolon };
 
   Kind kind;
   Node::TokenIndex token;

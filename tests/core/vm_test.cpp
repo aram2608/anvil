@@ -22,7 +22,7 @@ Object::Value RunMockVM(const char *src) {
 }
 
 TEST(VM, Binops) {
-  ASSERT_EQ(2, RunMockVM("1 + 1").as.i);
-  ASSERT_EQ(0, RunMockVM("1 - 1").as.i);
-  ASSERT_EQ(1.0, RunMockVM("0 + 1.0").as.f);
+  ASSERT_EQ(2, RunMockVM("1 + 1;").as.i);
+  ASSERT_EQ(0, RunMockVM("1 - 1;").as.i);
+  ASSERT_EQ(1.0, RunMockVM("0 + 1.0;").as.f);
 }

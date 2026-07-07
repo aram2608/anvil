@@ -33,6 +33,11 @@ struct Node {
     uint32_t end;
   };
 
+  struct NodeAndExtra {
+    Index node;
+    ExtraIndex extra;
+  };
+
   // clang-format off
   using Data = std::variant<
     Index,         // node
@@ -40,6 +45,7 @@ struct Node {
     NodeAndNode,   // node_and_node
     TokenAndNode,  // token_and_node
     TokenAndToken, // token_and_token
+    NodeAndExtra,  // node_and_extra
     ExtraRange,    // extra_range
     std::monostate // Undefined, acts as a sentinel of sorts
     >;
@@ -49,6 +55,7 @@ struct Node {
     Root,
     IfSimple,
     IfFull,
+    Block,
     Add,
     Sub,
     Mult,

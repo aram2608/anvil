@@ -3,6 +3,7 @@
 #include "compiler/bytecode.hpp"
 #include "vm/object.hpp"
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -36,6 +37,8 @@ uint32_t Compiler::CompileStatements(Node::ExtraRange range) {
   return CompileStatement(children[children.size() - 1]);
 }
 
+// TODO: This is a bit of a misnomer, most of these are not statements so either
+// change the name or refactor into separate functions
 uint32_t Compiler::CompileStatement(uint32_t stmt) {
   Node::Kind kind = ast_.Nodes().Kinds()[stmt];
 
@@ -48,11 +51,34 @@ uint32_t Compiler::CompileStatement(uint32_t stmt) {
   case Node::Kind::Sub:
   case Node::Kind::Div:
   case Node::Kind::Mult:
+  case Node::Kind::LesserThan:
+  case Node::Kind::LesserEqual:
+  case Node::Kind::GreaterEqual:
+  case Node::Kind::GreaterThan:
+  case Node::Kind::Equal:
+  case Node::Kind::NotEqual:
     return CompileBinOp(kind, stmt);
+  case Node::Kind::IfFull:
+    return CompileIfFull(stmt);
+  case Node::Kind::Block:
+    return CompileBlock(stmt);
   default:
     assert(0 && "Unreachable at CompileStatement");
     break;
   }
+}
+
+uint32_t Compiler::CompileIfFull(uint32_t stmt) {
+  Node::Data data = ast_.Nodes().Datas()[stmt];
+  Node::NodeAndExtra if_node = std::get<Node::NodeAndExtra>(data);
+  uint32_t reg_cond = CompileStatement(ToU32(if_node.node));
+  assert(0 && "TODO: Finish the If compilation");
+}
+
+uint32_t Compiler::CompileBlock(uint32_t stmt) {
+  Node::Data data = ast_.Nodes().Datas()[stmt];
+  Node::ExtraRange range = std::get<Node::ExtraRange>(data);
+  return CompileStatements(range);
 }
 
 uint32_t Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
@@ -81,13 +107,29 @@ uint32_t Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
   case Node::Kind::Mult:
     inst = Code::CreateABCk(Code::Op::Mult, reg_result, reg_left, reg_right);
     break;
+  case Node::Kind::LesserEqual:
+    inst = Code::CreateABCk(Code::Op::Le, reg_result, reg_left, reg_right);
+    break;
+  case Node::Kind::LesserThan:
+    inst = Code::CreateABCk(Code::Op::Lt, reg_result, reg_left, reg_right);
+    break;
+  case Node::Kind::GreaterEqual:
+    inst = Code::CreateABCk(Code::Op::Ge, reg_result, reg_left, reg_right);
+    break;
+  case Node::Kind::GreaterThan:
+    inst = Code::CreateABCk(Code::Op::Gt, reg_result, reg_left, reg_right);
+    break;
+  case Node::Kind::Equal:
+    inst = Code::CreateABCk(Code::Op::Eq, reg_result, reg_left, reg_right);
+    break;
+  case Node::Kind::NotEqual:
+    inst = Code::CreateABCk(Code::Op::Ne, reg_result, reg_left, reg_right);
+    break;
   default:
     assert(0 && "Unreachable at CompileBinOp");
     break;
   }
   block_.PushInstruction(inst);
-
-  FreeRegs(reg_result + 1);
 
   return reg_result;
 }

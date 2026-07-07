@@ -9,7 +9,7 @@
 #include <string_view>
 
 struct ExprResult {
-  enum class Kind { Constant, Register, /* Jump, Local, Global, ... */ };
+  enum class Kind { Constant, Register, Jmp /* Local, Global, ... */ };
   Kind kind;
   uint32_t idx; // k-index or register, depending on kind
 };
@@ -23,6 +23,8 @@ class Compiler {
   void CompileRoot();
   uint32_t CompileStatements(Node::ExtraRange range);
   uint32_t CompileStatement(uint32_t stmt);
+  uint32_t CompileIfFull(uint32_t stmt);
+  uint32_t CompileBlock(uint32_t stmt);
   uint32_t CompileBinOp(Node::Kind kind, uint32_t expr);
   uint32_t CompileIntLiteral(uint32_t lit);
   uint32_t CompileFltLiteral(uint32_t lit);

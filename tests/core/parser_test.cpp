@@ -28,17 +28,42 @@ void ExpectKinds(const char *src, std::vector<Node::Kind> expected) {
 using K = Node::Kind;
 
 TEST(Parser, ParseAddition) {
-  ExpectKinds("1 + 1", {K::Root, K::Int, K::Int, K::Add});
+  ExpectKinds("1 + 1;", {K::Root, K::Int, K::Int, K::Add});
 }
 
 TEST(Parser, ParseSubtraction) {
-  ExpectKinds("1 - 1", {K::Root, K::Int, K::Int, K::Sub});
+  ExpectKinds("1 - 1;", {K::Root, K::Int, K::Int, K::Sub});
 }
 
 TEST(Parser, ParseMultiplication) {
-  ExpectKinds("1 * 1", {K::Root, K::Int, K::Int, K::Mult});
+  ExpectKinds("1 * 1;", {K::Root, K::Int, K::Int, K::Mult});
 }
 
 TEST(Parser, ParseDivision) {
-  ExpectKinds("1 / 1", {K::Root, K::Int, K::Int, K::Div});
+  ExpectKinds("1 / 1;", {K::Root, K::Int, K::Int, K::Div});
+}
+
+TEST(Parser, ParseIf) {
+  std::string source = R"(
+    if 1 == 1 {
+        1 + 1;
+    } else {
+        2 + 2;
+    }
+  )";
+  ExpectKinds(source.c_str(), {
+                                  K::Root,
+                                  K::Int,
+                                  K::Int,
+                                  K::Equal,
+                                  K::Int,
+                                  K::Int,
+                                  K::Add,
+                                  K::Block,
+                                  K::Int,
+                                  K::Int,
+                                  K::Add,
+                                  K::Block,
+                                  K::IfFull,
+                              });
 }

@@ -5,7 +5,6 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 
 namespace {
 
@@ -46,7 +45,7 @@ OprData GetPrec(Token::Kind kind) {
 
 } // namespace
 
-Parser::Parser(std::string source, std::vector<Token> tokens)
+Parser::Parser(std::string_view source, std::vector<Token> tokens)
     : source_{source}, tokens_{tokens}, current_{0} {}
 
 Ast Parser::Parse() {
@@ -64,28 +63,84 @@ void Parser::ParseRoot() {
   const int scratch_top = scratch_.size();
 
   while (!IsEnd()) {
-    ParseStatements();
+    scratch_.push_back(ParseStatements());
   }
 
   nodes_[ToU32(root)].data = CommitScratch(scratch_top);
 }
 
 // stmts <- (SEMICOLON | block | expr)* EOF
-void Parser::ParseStatements() {
+Node::Index Parser::ParseStatements() {
   switch (TokenKind(current_)) {
   case Token::Kind::LeftBrace:
-    // TOOD: Add blocks
-    break;
+    return ParseBlock();
+  case Token::Kind::If:
+    return ParseIf();
   default:
-    // TODO: A bit of a hack to get expressions going
-    // fix later on
-    scratch_.push_back(ParseExpression());
-    break;
+    return ParseExpressionStatement();
   }
 }
 
+Node::Index Parser::ParseExpressionStatement() {
+  Node::Index expr = ParseExpression();
+  if (EatToken(Token::Kind::SemiColon) == Node::TokenIndex::None) {
+    errors_.push_back({
+        .kind = ParseError::Kind::MissingSemicolon,
+        .token = Advance(),
+    });
+  }
+  return expr;
+}
+
+Node::Index Parser::ParseBlock() {
+  Node::TokenIndex left_brace = EatToken(Token::Kind::LeftBrace);
+  auto top = scratch_.size();
+  while (true) { // add error checking here and recovery
+                 // need to synchronize
+    if (TokenKind(current_) == Token::Kind::RightBrace) break;
+    scratch_.push_back(ParseStatements());
+  }
+  EatToken(Token::Kind::RightBrace);
+  return AddNode({
+      .kind = Node::Kind::Block,
+      .main_token = left_brace,
+      .data = CommitScratch(top),
+  });
+}
+
+// if_stmt <- KEYWORD_IF expr stmt* (KEYWORD_ELSE stmt*)?
 Node::Index Parser::ParseIf() {
   Node::TokenIndex if_token = EatToken(Token::Kind::If);
+  Node::Index condition = ParseExpression(); // add an error check here
+
+  Node::Index then_branch = ParseStatements();
+
+  if (EatToken(Token::Kind::Else) == Node::TokenIndex::None) {
+    return AddNode({
+        .kind = Node::Kind::IfSimple,
+        .main_token = if_token,
+        .data =
+            Node::NodeAndNode{
+                condition,
+                then_branch,
+            },
+    });
+  }
+
+  Node::Index else_branch = ParseStatements();
+
+  return AddNode({
+      .kind = Node::Kind::IfFull,
+      .main_token = if_token,
+      .data =
+          Node::NodeAndExtra{
+              condition,
+              AddExtra(Node::IfExtra{
+                  .then_expr = then_branch,
+                  .else_expr = else_branch,
+              }),
+          },
+  });
 }
 
 // expr <- prefix (binop expr)*

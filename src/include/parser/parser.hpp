@@ -32,8 +32,10 @@ class Parser {
   bool IsEnd();
   Node::ExtraRange CommitScratch(const int top);
   void ParseRoot();
-  void ParseStatements();
+  Node::Index ParseStatements();
+  Node::Index ParseBlock();
   Node::Index ParseIf();
+  Node::Index ParseExpressionStatement();
   Node::Index ParseExpression();
   Node::Index ParseExpressionPrecedence(const int min);
   Node::Index ParsePrefix();
@@ -45,7 +47,7 @@ class Parser {
   Node::ExtraIndex AddExtra(Node::IfExtra extra);
 
 public:
-  Parser(std::string source, std::vector<Token> tokens);
+  Parser(std::string_view source, std::vector<Token> tokens);
 
   Ast Parse();
 };

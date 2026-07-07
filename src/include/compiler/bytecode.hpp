@@ -53,16 +53,13 @@ namespace Code {
 
 using Inst = uint32_t;
 
-// Do not change the order of this Enum, horrible things will happen downstream
+// clang-format off
+#define OPCODE_ENUM(Name, Str) Name,
 enum class Op {
-  Move,
-  LoadK,
-  Add,
-  Sub,
-  Mult,
-  Div,
-  Ret,
+  #include "compiler/bytecode.def"
 };
+#undef OPCODE_ENUM
+// clang-format on
 
 enum class Mode { iABC, ivABC, iABx, iAsBx, iAx, isJ };
 
@@ -104,15 +101,11 @@ struct OpMetadata {
 static_assert(sizeof(OpMetadata) == 1, "Must stay exactly 1 byte for L1 cache");
 
 // clang-format off
+#define OPCODE_ENUM(Name, Str) "Str",
 inline constexpr std::string_view kOpNames[] = {
-    "MOVE",
-    "LOADK",
-    "ADD",
-    "SUB",
-    "MULT",
-    "DIV",
-    "RET",
+    #include "compiler/bytecode.def"
 };
+#undef OPCODE_ENUM
 // clang-format on
 
 constexpr std::string_view GetOpName(Op op) {
@@ -128,9 +121,21 @@ inline constexpr OpMetadata kOpInfo[] = {
     /* Op::Sub   */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
     /* Op::Mult  */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
     /* Op::Div   */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
-    /* Op::Ret   */ OpMetadata::Create(Mode::iABC, false,  false, false, false, false),
+    /* Op::Ret   */ OpMetadata::Create(Mode::iABC,  false, false, false, false, false),
+    /* Op::Test  */ OpMetadata::Create(Mode::iABC,  false, true,  false, false, false),
+    /* Op::Jmp   */ OpMetadata::Create(Mode::isJ,   false, false, false, false, false),
+    /* Op::LT    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::LE    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::GT    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::GE    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::EQ    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::NE    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
 };
 // clang-format on
+
+// If any new Ops are added to the bytecode.def file this will ensure that
+// the kOpInfo tables remains in sync.
+static_assert(std::size(kOpInfo) == std::size(kOpNames));
 
 constexpr Mode GetMode(Op op) {
   return kOpInfo[static_cast<uint32_t>(op)].mode();

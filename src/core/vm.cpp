@@ -4,6 +4,8 @@
 #include <cassert>
 #include <exception>
 #include <functional>
+#include <iostream>
+#include <stdexcept>
 
 namespace {
 
@@ -24,12 +26,19 @@ inline Object::Value Arith(const Object::Value &a, const Object::Value &b,
   assert(0 && "Unreachable at Arith");
 }
 
+class RunTimeError : public std::runtime_error {
+public:
+  explicit RunTimeError(std::string message)
+      : std::runtime_error{message.c_str()} {}
+};
+
 } // namespace
 
 VM::VM(Block block) : block_{block} {}
 
 // Temporary function before printing can happen
 // returns the last value from the Ret instruction
+// assumes no errors will happen during excecution
 Object::Value VM::MockRun() {
   auto code = block_.get_code();
   for (;;) {
@@ -58,7 +67,9 @@ Object::Value VM::MockRun() {
       break;
     case Code::Op::Div: {
       Object::Value b = regs_[Code::GetC(i)];
-      if (Object::isZero(b)) throw std::exception{};
+      if (Object::isZero(b))
+        throw RunTimeError{"Division by zero"}; // TODO: Construct error string
+                                                // from line loc
       regs_[Code::GetA(i)] =
           Arith(regs_[Code::GetB(i)], regs_[Code::GetC(i)], std::divides<>{});
     } break;
@@ -68,4 +79,10 @@ Object::Value VM::MockRun() {
   }
 }
 
-void VM::Run() { MockRun(); }
+void VM::Run() {
+  try {
+    MockRun();
+  } catch (const RunTimeError &e) {
+    std::cout << e.what() << "\n";
+  }
+}

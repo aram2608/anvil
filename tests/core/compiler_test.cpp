@@ -19,7 +19,7 @@ Block RunCompiler(const char *src) {
 }
 
 TEST(Compiler, CompileBinOps) {
-  Block b = RunCompiler("1 + 1");
+  Block b = RunCompiler("1 + 1;");
 
   ASSERT_EQ(b.ConstantsSize(), 2);
   ASSERT_EQ(b.OpcodesSize(), 4);

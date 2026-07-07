@@ -35,15 +35,13 @@ KeyWordMap(std::array<std::pair<std::string_view, Token::Kind>, Size>)
 static constexpr auto kKeyWords =
     KeyWordMap{std::to_array<std::pair<std::string_view, Token::Kind>>({
         {"if", Token::Kind::If},
-        {"else", Token::Kind::Else},
         {"while", Token::Kind::While},
         {"for", Token::Kind::For},
         {"proc", Token::Kind::FuncDecl},
-        {"if", Token::Kind::If},
         {"else", Token::Kind::Else},
     })};
 
-Lexer::Lexer(std::string source)
+Lexer::Lexer(std::string_view source)
     : source_{source}, start_(0), current_(0), line_(1) {}
 
 std::vector<Token> Lexer::ScanTokens() {
@@ -135,6 +133,10 @@ void DispatchLexBang(Lexer &lex) {
 
 void DispatchLexSemiColon(Lexer &lex) { lex.PushToken(Token::Kind::SemiColon); }
 
+void DispatchLexEqual(Lexer &lex) {
+  lex.OpAssign(Token::Kind::EqualEqual, Token::Kind::Equal);
+}
+
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
 
@@ -160,6 +162,7 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table['}'] = &DispatchLexRightBrace;
   table[';'] = &DispatchLexSemiColon;
   table['!'] = &DispatchLexBang;
+  table['='] = &DispatchLexEqual;
 
   // LeftBrace,
   // RightBrace,

@@ -26,7 +26,7 @@ private:
   std::string_view Slice();
 
 public:
-  Lexer(std::string sourc);
+  Lexer(std::string_view sourc);
   std::vector<Token> ScanTokens();
 
   // OOP is a bit of a scam I suppose
@@ -52,6 +52,7 @@ public:
   friend void DispatchLexRightBrace(Lexer &lex);
   friend void DispatchLexSemiColon(Lexer &lex);
   friend void DispatchLexBang(Lexer &lex);
+  friend void DispatchLexEqual(Lexer &lex);
 };
 
 #endif

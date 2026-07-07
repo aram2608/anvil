@@ -1,0 +1,23 @@
+// Used to populate the enum class for Op codes as well as the string table
+// for dissasembly. The table that constructs the meta info for using the
+// instructions must follow this order.
+
+#if !defined(OPCODE_ENUM)
+#error "OPCODE_ENUM x-macro must be defined to use this file"
+#endif
+
+OPCODE_ENUM(Move, MOVE)
+OPCODE_ENUM(LoadK, LOADK)
+OPCODE_ENUM(Add, ADD)
+OPCODE_ENUM(Sub, SUB)
+OPCODE_ENUM(Mult, MULT)
+OPCODE_ENUM(Div, DIV)
+OPCODE_ENUM(Ret, RET)
+OPCODE_ENUM(Test, TEST)
+OPCODE_ENUM(Jmp, JMP)
+OPCODE_ENUM(Lt, LT)
+OPCODE_ENUM(Le, LE)
+OPCODE_ENUM(Gt, GT)
+OPCODE_ENUM(Ge, GE)
+OPCODE_ENUM(Eq, EQ)
+OPCODE_ENUM(Ne, NE)
