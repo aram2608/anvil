@@ -61,8 +61,8 @@ TEST(Lexer, LexIdents) {
 TEST(Lexer, LexNumbers) {
   ExpectKinds("bar 1 1.0", {
                                Token::Kind::Identifier,
-                               Token::Kind::Int,
-                               Token::Kind::Float,
+                               Token::Kind::IntLiteral,
+                               Token::Kind::FloatLiteral,
                                Token::Kind::EndOfFile,
                            });
 }

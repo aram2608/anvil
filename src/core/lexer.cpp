@@ -39,6 +39,8 @@ static constexpr auto kKeyWords =
         {"while", Token::Kind::While},
         {"for", Token::Kind::For},
         {"proc", Token::Kind::FuncDecl},
+        {"if", Token::Kind::If},
+        {"else", Token::Kind::Else},
     })};
 
 Lexer::Lexer(std::string source)
@@ -95,9 +97,9 @@ void DispatchLexNumber(Lexer &lex) {
     while (lex.InNumber()) {
       lex.Advance();
     }
-    lex.PushToken(Token::Kind::Float);
+    lex.PushToken(Token::Kind::FloatLiteral);
   } else {
-    lex.PushToken(Token::Kind::Int);
+    lex.PushToken(Token::Kind::IntLiteral);
   }
 }
 

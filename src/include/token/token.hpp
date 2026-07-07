@@ -25,9 +25,9 @@ struct Token {
 
     // Types
     Nil,
-    Int,
-    Float,
-    String,
+    IntLiteral,
+    FloatLiteral,
+    StringLiteral,
 
     // Other
     Colon,
@@ -36,10 +36,13 @@ struct Token {
     Identifier,
     EndOfFile,
     Dot,
+
+    // Control flow
     If,
     For,
     Else,
     While,
+
     FuncDecl,
 
     LeftParen,

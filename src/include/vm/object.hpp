@@ -16,6 +16,7 @@ struct Value {
   union {
     int64_t i;
     double f;
+    bool b;
   } as;
   Kind kind;
 };
@@ -35,6 +36,16 @@ inline Value mkFloat(double x) {
 
 inline bool isInt(const Value &v) { return v.kind == Kind::Int; }
 inline bool isFloat(const Value &v) { return v.kind == Kind::Float; }
+inline bool isZero(const Value &v) {
+  switch (v.kind) {
+  case Kind::Float:
+    return v.as.f == 0;
+  case Kind::Int:
+    return v.as.i == 0;
+  case Kind::Void:
+    return false;
+  }
+}
 
 inline int64_t asInt(const Value &v) { return v.as.i; }
 inline double asFloat(const Value &v) { return v.as.f; }

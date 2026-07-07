@@ -1,17 +1,17 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
+#include <cstdint>
 #include <variant>
 
-struct Node {
-  struct Index {
-    unsigned int value;
-    operator unsigned int() const { return value; }
-  };
+template <typename T>
+inline uint32_t ToU32(T index) {
+  return static_cast<uint32_t>(index);
+}
 
-  struct TokenIndex {
-    unsigned int value;
-    operator unsigned int() const { return value; }
-  };
+struct Node {
+  enum class Index : uint32_t { None = 0xFFFFFFFF };
+  enum class TokenIndex : uint32_t { None = 0xFFFFFFFF };
+  enum class ExtraIndex : uint32_t { None = 0xFFFFFFFF };
 
   struct NodeAndNode {
     Index first;
@@ -46,8 +46,9 @@ struct Node {
   // clang-format on
 
   enum class Kind {
-    // Keep in the same order as Op::Kind for the compiler
     Root,
+    IfSimple,
+    IfFull,
     Add,
     Sub,
     Mult,
@@ -70,6 +71,11 @@ struct Node {
   Kind kind;
   TokenIndex main_token;
   Data data;
+
+  struct IfExtra {
+    Index then_expr;
+    Index else_expr;
+  };
 };
 
 #endif

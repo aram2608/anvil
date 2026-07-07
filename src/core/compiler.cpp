@@ -18,7 +18,9 @@ Block Compiler::Compile() {
 void Compiler::CompileRoot() {
   auto root = ast_.Nodes().Datas()[0];
   auto range = std::get<Node::ExtraRange>(root);
-  CompileStatements(range);
+  uint32_t v = CompileStatements(range);
+  // Lua convention: B = nresults + 1, so B=2 returns the one value in R[A]
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v, 2, 0));
 }
 
 uint32_t Compiler::CompileStatements(Node::ExtraRange range) {
@@ -34,12 +36,14 @@ uint32_t Compiler::CompileStatements(Node::ExtraRange range) {
   return CompileStatement(children[children.size() - 1]);
 }
 
-uint32_t Compiler::CompileStatement(unsigned int stmt) {
+uint32_t Compiler::CompileStatement(uint32_t stmt) {
   Node::Kind kind = ast_.Nodes().Kinds()[stmt];
 
   switch (kind) {
   case Node::Kind::Int:
     return CompileIntLiteral(stmt);
+  case Node::Kind::Float:
+    return CompileFltLiteral(stmt);
   case Node::Kind::Add:
   case Node::Kind::Sub:
   case Node::Kind::Div:
@@ -51,11 +55,11 @@ uint32_t Compiler::CompileStatement(unsigned int stmt) {
   }
 }
 
-uint32_t Compiler::CompileBinOp(Node::Kind kind, unsigned int expr) {
+uint32_t Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
   Node::Data data = ast_.Nodes().Datas()[expr];
   Node::NodeAndNode bin_op = std::get<Node::NodeAndNode>(data);
-  uint32_t reg_left = CompileStatement(bin_op.first);
-  uint32_t reg_right = CompileStatement(bin_op.second);
+  uint32_t reg_left = CompileStatement(ToU32(bin_op.first));
+  uint32_t reg_right = CompileStatement(ToU32(bin_op.second));
 
   uint32_t reg_result = AllocateReg();
 
@@ -63,7 +67,7 @@ uint32_t Compiler::CompileBinOp(Node::Kind kind, unsigned int expr) {
 
   // TODO: Fix this up a bit
   // This is incredibly dumb, either make singleton functions that can handle
-  // this in a slicker manner or something
+  // this in a slicker manner or maybe a function table
   switch (kind) {
   case Node::Kind::Add:
     inst = Code::CreateABCk(Code::Op::Add, reg_result, reg_left, reg_right);
@@ -88,10 +92,10 @@ uint32_t Compiler::CompileBinOp(Node::Kind kind, unsigned int expr) {
   return reg_result;
 }
 
-uint32_t Compiler::CompileFltLiteral(unsigned int lit) {
+uint32_t Compiler::CompileFltLiteral(uint32_t lit) {
   Node::Data data = ast_.Nodes().Datas()[lit];
   auto token = ast_.Nodes().MainTokens()[lit];
-  block_.PushConstant(Object::mkInt(std::stof(SliceFromToken(token))));
+  block_.PushConstant(Object::mkFloat(std::stod(SliceFromToken(token))));
 
   uint32_t const_index = block_.ConstantsSize() - 1;
   uint32_t target_reg = AllocateReg();
@@ -102,7 +106,7 @@ uint32_t Compiler::CompileFltLiteral(unsigned int lit) {
   return target_reg;
 }
 
-uint32_t Compiler::CompileIntLiteral(unsigned int lit) {
+uint32_t Compiler::CompileIntLiteral(uint32_t lit) {
   Node::Data data = ast_.Nodes().Datas()[lit];
   auto token = ast_.Nodes().MainTokens()[lit];
   block_.PushConstant(Object::mkInt(std::stoi(SliceFromToken(token))));
@@ -116,9 +120,9 @@ uint32_t Compiler::CompileIntLiteral(unsigned int lit) {
   return target_reg;
 }
 
-std::string Compiler::SliceFromToken(size_t token) {
-  auto start = ast_.Tokens().Starts()[token];
-  auto len = ast_.Tokens().Lens()[token];
+std::string Compiler::SliceFromToken(Node::TokenIndex token) {
+  auto start = ast_.Tokens().Starts()[ToU32(token)];
+  auto len = ast_.Tokens().Lens()[ToU32(token)];
   // performs a heap allocation which is slightly wasteful
   // the object is small enough so maybe std::from_chars would be better
   return std::string{source_.substr(start, len)};

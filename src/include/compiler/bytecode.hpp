@@ -61,6 +61,7 @@ enum class Op {
   Sub,
   Mult,
   Div,
+  Ret,
 };
 
 enum class Mode { iABC, ivABC, iABx, iAsBx, iAx, isJ };
@@ -109,7 +110,8 @@ inline constexpr std::string_view kOpNames[] = {
     "ADD",
     "SUB",
     "MULT",
-    "DIV"
+    "DIV",
+    "RET",
 };
 // clang-format on
 
@@ -126,6 +128,7 @@ inline constexpr OpMetadata kOpInfo[] = {
     /* Op::Sub   */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
     /* Op::Mult  */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
     /* Op::Div   */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::Ret   */ OpMetadata::Create(Mode::iABC, false,  false, false, false, false),
 };
 // clang-format on
 

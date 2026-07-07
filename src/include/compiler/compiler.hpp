@@ -22,11 +22,11 @@ class Compiler {
 
   void CompileRoot();
   uint32_t CompileStatements(Node::ExtraRange range);
-  uint32_t CompileStatement(unsigned int stmt);
-  uint32_t CompileBinOp(Node::Kind kind, unsigned int expr);
-  uint32_t CompileIntLiteral(unsigned int lit);
-  uint32_t CompileFltLiteral(unsigned int lit);
-  std::string SliceFromToken(size_t token);
+  uint32_t CompileStatement(uint32_t stmt);
+  uint32_t CompileBinOp(Node::Kind kind, uint32_t expr);
+  uint32_t CompileIntLiteral(uint32_t lit);
+  uint32_t CompileFltLiteral(uint32_t lit);
+  std::string SliceFromToken(Node::TokenIndex token);
   uint32_t AllocateReg();
   void FreeRegs(uint32_t keep);
 

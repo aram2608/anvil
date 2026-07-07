@@ -4,6 +4,8 @@
 #include "token/token.hpp"
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 
 namespace {
 
@@ -55,7 +57,7 @@ Ast Parser::Parse() {
 void Parser::ParseRoot() {
   Node::Index root = AddNode({
       .kind = Node::Kind::Root,
-      .main_token = {0},
+      .main_token = Node::TokenIndex{0},
       .data = std::monostate{},
   });
 
@@ -65,7 +67,7 @@ void Parser::ParseRoot() {
     ParseStatements();
   }
 
-  nodes_[root].data = CommitScratch(scratch_top);
+  nodes_[ToU32(root)].data = CommitScratch(scratch_top);
 }
 
 // stmts <- (SEMICOLON | block | expr)* EOF
@@ -80,6 +82,10 @@ void Parser::ParseStatements() {
     scratch_.push_back(ParseExpression());
     break;
   }
+}
+
+Node::Index Parser::ParseIf() {
+  Node::TokenIndex if_token = EatToken(Token::Kind::If);
 }
 
 // expr <- prefix (binop expr)*
@@ -133,14 +139,14 @@ Node::Index Parser::ParsePrefix() {
 
 Node::Index Parser::ParseAtom() {
   switch (TokenKind(current_)) {
-  case Token::Kind::Int:
+  case Token::Kind::IntLiteral:
     return AddNode({
         .kind = Node::Kind::Int,
         .main_token = Advance(),
         .data = std::monostate{},
     });
     break;
-  case Token::Kind::Float:
+  case Token::Kind::FloatLiteral:
     return AddNode({
         .kind = Node::Kind::Float,
         .main_token = Advance(),
@@ -162,35 +168,52 @@ Node::Index Parser::ParseAtom() {
 
 Node::ExtraRange Parser::CommitScratch(const int top) {
   std::span<const Node::Index> items{scratch_.begin() + top, scratch_.end()};
-  unsigned int start = static_cast<unsigned int>(extra_data_.size());
+  uint32_t start = static_cast<uint32_t>(extra_data_.size());
   extra_data_.reserve(extra_data_.size() + items.size());
 
   for (const auto &idx : items) {
-    extra_data_.push_back(static_cast<uint32_t>(idx));
+    extra_data_.push_back(ToU32(idx));
   }
 
-  unsigned int end = static_cast<unsigned int>(extra_data_.size());
+  uint32_t end = static_cast<uint32_t>(extra_data_.size());
   scratch_.resize(top);
   return Node::ExtraRange{.start = start, .end = end};
 }
 
 Node::TokenIndex Parser::Advance() {
   current_ += 1;
-  return {current_ - 1};
+  return Node::TokenIndex{current_ - 1};
 }
 
-Node::TokenIndex Parser::Previous() { return {current_ - 1}; }
+Node::TokenIndex Parser::Previous() { return Node::TokenIndex{current_ - 1}; }
 
 Node::Index Parser::AddNode(Node node) {
   nodes_.push_back(node);
-  return {static_cast<unsigned int>(nodes_.size() - 1)};
+  return Node::Index{static_cast<uint32_t>(nodes_.size() - 1)};
+}
+
+Node::TokenIndex Parser::EatToken(Token::Kind kind) {
+  if (TokenKind(current_) == kind) {
+    return Advance();
+  }
+  return Node::TokenIndex::None;
 }
 
 bool Parser::IsEnd() {
   return tokens_.Kinds()[current_] == Token::Kind::EndOfFile;
 }
 
-Token::Kind Parser::TokenKind(const unsigned int idx) {
+Token::Kind Parser::TokenKind(const uint32_t idx) {
   assert(tokens_.Kinds().size() > idx);
   return tokens_.Kinds()[idx];
+}
+
+Node::ExtraIndex Parser::AddExtra(Node::IfExtra extra) {
+  uint32_t result = static_cast<uint32_t>(extra_data_.size());
+
+  // Serialized sequentially
+  PushExtraValue(extra.then_expr);
+  PushExtraValue(extra.else_expr);
+
+  return Node::ExtraIndex{result};
 }
