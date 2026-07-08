@@ -1,5 +1,7 @@
 #include "ast/ast.hpp"
+#include "ast/node.hpp"
 #include <iostream>
+#include <numbers>
 
 Ast::Ast(std::string_view source, TokenBuffer tokens, NodeBuffer nodes,
          std::vector<uint32_t> extra_data, std::vector<ParseError> errors)
@@ -11,9 +13,13 @@ bool Ast::CheckErrors() const {
     for (auto &err : errors_) {
       const auto start = tokens_.Starts()[ToU32(err.token)];
       const auto len = tokens_.Lens()[ToU32(err.token)];
+      const auto line = tokens_.Lines()[ToU32(err.token)];
       switch (err.kind) {
       case ParseError::Kind::UnexpectedToken:
         std::cout << "Unexpected Token: " << source_.substr(start, len) << "\n";
+        break;
+      case ParseError::Kind::MissingSemicolon:
+        std::cout << "Missing semicolon at line " << line << "\n";
         break;
       }
     }

@@ -10,6 +10,7 @@ enum class Kind : uint8_t {
   Void = 0,
   Int = 1,
   Float = 2,
+  Bool = 3,
 };
 
 struct Value {
@@ -34,8 +35,17 @@ inline Value mkFloat(double x) {
   return Value{.as = {.f = x}, .kind = Kind::Float};
 }
 
+inline Value mkBool(bool x) {
+  return Value{.as = {.b = x}, .kind = Kind::Bool};
+}
+
+inline bool isBool(const Value &v) { return v.kind == Kind::Bool; }
 inline bool isInt(const Value &v) { return v.kind == Kind::Int; }
 inline bool isFloat(const Value &v) { return v.kind == Kind::Float; }
+
+// TODO: Find a better solution for this
+// This should ideally only handle numeric types, perhaps we throw an error at
+// the site of use if the kind is not numeric, not sure
 inline bool isZero(const Value &v) {
   switch (v.kind) {
   case Kind::Float:
@@ -43,6 +53,7 @@ inline bool isZero(const Value &v) {
   case Kind::Int:
     return v.as.i == 0;
   case Kind::Void:
+  case Kind::Bool:
     return false;
   }
 }

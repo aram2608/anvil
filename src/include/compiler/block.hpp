@@ -20,6 +20,7 @@ public:
   std::span<const Code::Inst> get_code() const { return code_; }
   std::span<const Object::Value> get_constants() const { return k_; }
   std::span<const int> get_lines() const { return line_info_; }
+  Code::Inst &InstAt(uint32_t idx) { return code_[idx]; }
 };
 
 #endif

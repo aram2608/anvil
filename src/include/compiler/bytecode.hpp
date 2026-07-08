@@ -101,7 +101,7 @@ struct OpMetadata {
 static_assert(sizeof(OpMetadata) == 1, "Must stay exactly 1 byte for L1 cache");
 
 // clang-format off
-#define OPCODE_ENUM(Name, Str) "Str",
+#define OPCODE_ENUM(Name, Str) #Str,
 inline constexpr std::string_view kOpNames[] = {
     #include "compiler/bytecode.def"
 };

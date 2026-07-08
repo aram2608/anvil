@@ -30,7 +30,9 @@ class Compiler {
   uint32_t CompileFltLiteral(uint32_t lit);
   std::string SliceFromToken(Node::TokenIndex token);
   uint32_t AllocateReg();
-  void FreeRegs(uint32_t keep);
+  void FreeReg(uint32_t keep);
+  uint32_t EmitJump();
+  void PatchJumpToHere(uint32_t jump_idx);
 
 public:
   Compiler(std::string_view source, Ast ast);

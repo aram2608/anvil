@@ -19,6 +19,7 @@ public:
   std::span<const Token::Kind> Kinds() const { return kind_; }
   std::span<const int> Starts() const { return start_; }
   std::span<const int> Lens() const { return len_; }
+  std::span<const int> Lines() const { return line_; }
 };
 
 class NodeBuffer {

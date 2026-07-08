@@ -21,6 +21,9 @@ void Compiler::CompileRoot() {
   auto range = std::get<Node::ExtraRange>(root);
   uint32_t v = CompileStatements(range);
   // Lua convention: B = nresults + 1, so B=2 returns the one value in R[A]
+  // B = 0 -> dynamic result
+  // B = 1 -> returns 0 values
+  // B = 2 -> returns one value, in R[A]
   block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v, 2, 0));
 }
 
@@ -71,8 +74,34 @@ uint32_t Compiler::CompileStatement(uint32_t stmt) {
 uint32_t Compiler::CompileIfFull(uint32_t stmt) {
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::NodeAndExtra if_node = std::get<Node::NodeAndExtra>(data);
+
+  uint32_t extra = ToU32(if_node.extra);
+  uint32_t then_expr = ast_.ExtraData()[extra];
+  uint32_t else_expr = ast_.ExtraData()[extra + 1];
+
+  uint32_t base = next_reg_;
+
   uint32_t reg_cond = CompileStatement(ToU32(if_node.node));
-  assert(0 && "TODO: Finish the If compilation");
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, reg_cond, 0, 0, 0));
+  uint32_t jmp_to_else = EmitJump();
+
+  // Only one jump is possible so the branches can share registers
+  // The Inst needs to Move to the same location for both (ie the base) so the
+  // VM knows where the if-expression's value lives
+  FreeReg(base);
+  uint32_t reg_then = CompileStatement(then_expr);
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_then, 0));
+  uint32_t jmp_to_end = EmitJump();
+  PatchJumpToHere(jmp_to_else);
+
+  // See comment above ^
+  FreeReg(base);
+  uint32_t reg_else = CompileStatement(else_expr);
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_else, 0));
+  PatchJumpToHere(jmp_to_end);
+
+  FreeReg(base + 1);
+  return base;
 }
 
 uint32_t Compiler::CompileBlock(uint32_t stmt) {
@@ -172,4 +201,15 @@ std::string Compiler::SliceFromToken(Node::TokenIndex token) {
 
 uint32_t Compiler::AllocateReg() { return next_reg_++; }
 
-void Compiler::FreeRegs(uint32_t keep) { next_reg_ = keep; }
+void Compiler::FreeReg(uint32_t keep) { next_reg_ = keep; }
+
+uint32_t Compiler::EmitJump() {
+  block_.PushInstruction(Code::CreatesJ(Code::Op::Jmp, 0));
+  return block_.OpcodesSize() - 1;
+}
+
+void Compiler::PatchJumpToHere(uint32_t jump_idx) {
+  // Offsets are signed
+  int32_t offset = static_cast<int32_t>(block_.OpcodesSize() - (jump_idx + 1));
+  Code::SetsJ(block_.InstAt(jump_idx), offset);
+}
