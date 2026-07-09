@@ -39,6 +39,7 @@ static constexpr auto kKeyWords =
         {"for", Token::Kind::For},
         {"proc", Token::Kind::FuncDecl},
         {"else", Token::Kind::Else},
+        {"return", Token::Kind::Return},
     })};
 
 Lexer::Lexer(std::string_view source)
@@ -137,6 +138,16 @@ void DispatchLexEqual(Lexer &lex) {
   lex.OpAssign(Token::Kind::EqualEqual, Token::Kind::Equal);
 }
 
+void DispatchLexLesser(Lexer &lex) {
+  lex.OpAssign(Token::Kind::LesserEqual, Token::Kind::Lesser);
+}
+
+void DispatchLexGreater(Lexer &lex) {
+  lex.OpAssign(Token::Kind::GreaterEqual, Token::Kind::Greater);
+}
+
+void DispatchLexComma(Lexer &lex) { lex.PushToken(Token::Kind::Comma); }
+
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
 
@@ -163,6 +174,9 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table[';'] = &DispatchLexSemiColon;
   table['!'] = &DispatchLexBang;
   table['='] = &DispatchLexEqual;
+  table['>'] = &DispatchLexGreater;
+  table['<'] = &DispatchLexLesser;
+  table[','] = &DispatchLexComma;
 
   // LeftBrace,
   // RightBrace,

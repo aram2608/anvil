@@ -55,6 +55,8 @@ struct Node {
     Root,
     IfSimple,
     IfFull,
+    ReturnSimple,
+    ReturnMulti,
     Block,
     Add,
     Sub,

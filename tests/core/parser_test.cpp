@@ -18,6 +18,7 @@ Ast RunParser(const char *src) {
 void ExpectKinds(const char *src, std::vector<Node::Kind> expected) {
   auto ast = RunParser(src);
   auto kinds = ast.Nodes().Kinds();
+  EXPECT_TRUE(ast.Errors().empty());
 
   ASSERT_EQ(expected.size(), kinds.size());
   for (unsigned int i = 0; i < expected.size(); i++) {
@@ -43,7 +44,7 @@ TEST(Parser, ParseDivision) {
   ExpectKinds("1 / 1;", {K::Root, K::Int, K::Int, K::Div});
 }
 
-TEST(Parser, ParseIf) {
+TEST(Parser, ParseIfFull) {
   std::string source = R"(
     if 1 == 1 {
         1 + 1;
@@ -65,5 +66,44 @@ TEST(Parser, ParseIf) {
                                   K::Add,
                                   K::Block,
                                   K::IfFull,
+                              });
+}
+
+TEST(Parser, ParseIfSimple) {
+  std::string source = R"(
+    if 1 == 1 {
+      1 + 1;
+    }
+  )";
+  ExpectKinds(source.c_str(), {
+                                  K::Root,
+                                  K::Int,
+                                  K::Int,
+                                  K::Equal,
+                                  K::Int,
+                                  K::Int,
+                                  K::Add,
+                                  K::Block,
+                                  K::IfSimple,
+                              });
+}
+
+TEST(Parser, ParseReturn) {
+  std::string source = R"(
+    if 1 == 1 {
+      return 1 + 1;
+    }
+  )";
+  ExpectKinds(source.c_str(), {
+                                  K::Root,
+                                  K::Int,
+                                  K::Int,
+                                  K::Equal,
+                                  K::Int,
+                                  K::Int,
+                                  K::Add,
+                                  K::ReturnSimple,
+                                  K::Block,
+                                  K::IfSimple,
                               });
 }

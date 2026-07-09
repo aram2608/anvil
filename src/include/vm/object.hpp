@@ -13,11 +13,14 @@ enum class Kind : uint8_t {
   Bool = 3,
 };
 
+struct Void {};
+
 struct Value {
   union {
     int64_t i;
     double f;
     bool b;
+    Void v;
   } as;
   Kind kind;
 };
@@ -37,6 +40,10 @@ inline Value mkFloat(double x) {
 
 inline Value mkBool(bool x) {
   return Value{.as = {.b = x}, .kind = Kind::Bool};
+}
+
+inline Value mkVoid(Void x) {
+  return Value{.as = {.v = x}, .kind = Kind::Void};
 }
 
 inline bool isBool(const Value &v) { return v.kind == Kind::Bool; }

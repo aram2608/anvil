@@ -36,12 +36,14 @@ struct Token {
     Identifier,
     EndOfFile,
     Dot,
+    Comma,
 
     // Control flow
     If,
     For,
     Else,
     While,
+    Return,
 
     FuncDecl,
 

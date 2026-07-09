@@ -39,9 +39,7 @@ constexpr auto MakePrecedenceTable() {
 
 inline constexpr auto kPrecs = MakePrecedenceTable();
 
-OprData GetPrec(Token::Kind kind) {
-  return kPrecs[static_cast<std::size_t>(kind)];
-}
+OprData GetPrec(Token::Kind kind) { return kPrecs[static_cast<size_t>(kind)]; }
 
 } // namespace
 
@@ -76,35 +74,73 @@ Node::Index Parser::ParseStatements() {
     return ParseBlock();
   case Token::Kind::If:
     return ParseIf();
+  case Token::Kind::Return:
+    return ParseReturn();
   default:
     return ParseExpressionStatement();
   }
 }
 
 Node::Index Parser::ParseExpressionStatement() {
+  // We need to keep track of errors while parsing downstream.
+  // If the errors_ vector grows, an error was encountered inside
+  // ParseExpression itself. This means that we don't need to add the missing
+  // semicolon error since at that point its just frivolous.
+  const size_t errs = errors_.size();
   Node::Index expr = ParseExpression();
-  if (EatToken(Token::Kind::SemiColon) == Node::TokenIndex::None) {
-    errors_.push_back({
-        .kind = ParseError::Kind::MissingSemicolon,
-        .token = Advance(),
-    });
-  }
+  ExpectSemicolon(errs);
   return expr;
 }
 
 Node::Index Parser::ParseBlock() {
   Node::TokenIndex left_brace = EatToken(Token::Kind::LeftBrace);
   auto top = scratch_.size();
-  while (true) { // add error checking here and recovery
-                 // need to synchronize
-    if (TokenKind(current_) == Token::Kind::RightBrace) break;
+  while (true) {
+    if (TokenKind(current_) == Token::Kind::RightBrace || IsEnd()) break;
     scratch_.push_back(ParseStatements());
   }
-  EatToken(Token::Kind::RightBrace);
+  if (EatToken(Token::Kind::RightBrace) == Node::TokenIndex::None) {
+    errors_.push_back({
+        .kind = ParseError::Kind::MissingClosingBrace,
+        .token = Previous(),
+    });
+  }
   return AddNode({
       .kind = Node::Kind::Block,
       .main_token = left_brace,
       .data = CommitScratch(top),
+  });
+}
+
+Node::Index Parser::ParseReturn() {
+  Node::TokenIndex return_token = EatToken(Token::Kind::Return);
+  const auto top = scratch_.size();
+  const size_t errs = errors_.size();
+
+  scratch_.push_back(ParseExpression());
+  while (EatToken(Token::Kind::Comma) != Node::TokenIndex::None) {
+    scratch_.push_back(ParseExpression());
+  }
+
+  ExpectSemicolon(errs);
+
+  if (scratch_.size() > top + 1) {
+    // TODO: Implement tuple returns once tuples are in the language
+    assert(0 && "Unreachable at ParseReturn.");
+    return AddNode({
+        .kind = Node::Kind::ReturnMulti,
+        .main_token = return_token,
+        .data = CommitScratch(top),
+    });
+  }
+
+  Node::Index expr = scratch_.back();
+  scratch_.pop_back();
+
+  return AddNode({
+      .kind = Node::Kind::ReturnSimple,
+      .main_token = return_token,
+      .data = expr,
   });
 }
 
@@ -236,8 +272,16 @@ Node::ExtraRange Parser::CommitScratch(const int top) {
 }
 
 Node::TokenIndex Parser::Advance() {
+  if (Peek() == Token::Kind::EndOfFile) {
+    return Node::TokenIndex{current_};
+  }
   current_ += 1;
   return Node::TokenIndex{current_ - 1};
+}
+
+Token::Kind Parser::Peek() {
+  assert(tokens_.Kinds().size() > current_);
+  return tokens_.Kinds()[current_];
 }
 
 Node::TokenIndex Parser::Previous() { return Node::TokenIndex{current_ - 1}; }
@@ -252,6 +296,18 @@ Node::TokenIndex Parser::EatToken(Token::Kind kind) {
     return Advance();
   }
   return Node::TokenIndex::None;
+}
+
+void Parser::ExpectSemicolon(const size_t errs) {
+  if (EatToken(Token::Kind::SemiColon) == Node::TokenIndex::None) {
+    if (errors_.size() == errs) {
+      errors_.push_back({
+          .kind = ParseError::Kind::MissingSemicolon,
+          .token = Previous(),
+      });
+    }
+    Synchronize();
+  }
 }
 
 bool Parser::IsEnd() {
@@ -271,4 +327,20 @@ Node::ExtraIndex Parser::AddExtra(Node::IfExtra extra) {
   PushExtraValue(extra.else_expr);
 
   return Node::ExtraIndex{result};
+}
+
+void Parser::Synchronize() {
+  while (true) {
+    if (IsEnd()) return;
+    switch (Peek()) {
+    case Token::Kind::SemiColon:
+      Advance();
+      return;
+    case Token::Kind::RightBrace:
+      return;
+    default:
+      Advance();
+      break;
+    }
+  }
 }

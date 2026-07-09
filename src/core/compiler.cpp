@@ -1,12 +1,14 @@
 #include "compiler/compiler.hpp"
 #include "ast/node.hpp"
 #include "compiler/bytecode.hpp"
+#include "utils/die.hpp"
 #include "vm/object.hpp"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <variant>
 
 Compiler::Compiler(std::string_view source, Ast ast)
     : source_{source}, ast_{ast} {}
@@ -19,7 +21,7 @@ Block Compiler::Compile() {
 void Compiler::CompileRoot() {
   auto root = ast_.Nodes().Datas()[0];
   auto range = std::get<Node::ExtraRange>(root);
-  uint32_t v = CompileStatements(range);
+  uint32_t v = CompileExpressions(range);
   // Lua convention: B = nresults + 1, so B=2 returns the one value in R[A]
   // B = 0 -> dynamic result
   // B = 1 -> returns 0 values
@@ -27,22 +29,22 @@ void Compiler::CompileRoot() {
   block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v, 2, 0));
 }
 
-uint32_t Compiler::CompileStatements(Node::ExtraRange range) {
+uint32_t Compiler::CompileExpressions(Node::ExtraRange range) {
   auto children =
       ast_.ExtraData().subspan(range.start, range.end - range.start);
 
-  if (children.empty()) return 0;
-
-  for (size_t i = 0; i < children.size() - 1; i++) {
-    CompileStatement(children[i]);
+  if (children.empty()) {
+    return EmitLoadK(Object::mkVoid({}));
   }
 
-  return CompileStatement(children[children.size() - 1]);
+  for (size_t i = 0; i < children.size() - 1; i++) {
+    CompileExpression(children[i]);
+  }
+
+  return CompileExpression(children[children.size() - 1]);
 }
 
-// TODO: This is a bit of a misnomer, most of these are not statements so either
-// change the name or refactor into separate functions
-uint32_t Compiler::CompileStatement(uint32_t stmt) {
+uint32_t Compiler::CompileExpression(uint32_t stmt) {
   Node::Kind kind = ast_.Nodes().Kinds()[stmt];
 
   switch (kind) {
@@ -63,11 +65,17 @@ uint32_t Compiler::CompileStatement(uint32_t stmt) {
     return CompileBinOp(kind, stmt);
   case Node::Kind::IfFull:
     return CompileIfFull(stmt);
+  case Node::Kind::IfSimple:
+    return CompileIfSimple(stmt);
   case Node::Kind::Block:
     return CompileBlock(stmt);
-  default:
-    assert(0 && "Unreachable at CompileStatement");
+  case Node::Kind::ReturnSimple:
+    return CompileReturnSimple(stmt);
+  default: {
+    DieLoudly{"Unreachable at CompileExpression"}();
+    assert(0); // Frivolous but control flow analysis gets mad w/out
     break;
+  }
   }
 }
 
@@ -81,7 +89,7 @@ uint32_t Compiler::CompileIfFull(uint32_t stmt) {
 
   uint32_t base = next_reg_;
 
-  uint32_t reg_cond = CompileStatement(ToU32(if_node.node));
+  uint32_t reg_cond = CompileExpression(ToU32(if_node.node));
   block_.PushInstruction(Code::CreateABCk(Code::Op::Test, reg_cond, 0, 0, 0));
   uint32_t jmp_to_else = EmitJump();
 
@@ -89,14 +97,14 @@ uint32_t Compiler::CompileIfFull(uint32_t stmt) {
   // The Inst needs to Move to the same location for both (ie the base) so the
   // VM knows where the if-expression's value lives
   FreeReg(base);
-  uint32_t reg_then = CompileStatement(then_expr);
+  uint32_t reg_then = CompileExpression(then_expr);
   block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_then, 0));
   uint32_t jmp_to_end = EmitJump();
   PatchJumpToHere(jmp_to_else);
 
   // See comment above ^
   FreeReg(base);
-  uint32_t reg_else = CompileStatement(else_expr);
+  uint32_t reg_else = CompileExpression(else_expr);
   block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_else, 0));
   PatchJumpToHere(jmp_to_end);
 
@@ -104,17 +112,54 @@ uint32_t Compiler::CompileIfFull(uint32_t stmt) {
   return base;
 }
 
+uint32_t Compiler::CompileIfSimple(uint32_t stmt) {
+  Node::Data data = ast_.Nodes().Datas()[stmt];
+  Node::NodeAndNode if_node = std::get<Node::NodeAndNode>(data);
+
+  uint32_t base = next_reg_;
+
+  uint32_t reg_cond = CompileExpression(ToU32(if_node.first));
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, reg_cond, 0, 0, 0));
+  uint32_t jmp_to_else = EmitJump();
+
+  FreeReg(base);
+  uint32_t reg_then = CompileExpression(ToU32(if_node.second));
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_then, 0));
+  uint32_t jmp_to_end = EmitJump();
+  PatchJumpToHere(jmp_to_else);
+
+  // The else branch needs a synthetic `Void` branch
+  FreeReg(base);
+  EmitLoadK(Object::mkVoid({}));
+  PatchJumpToHere(jmp_to_end);
+
+  FreeReg(base + 1);
+  return base;
+}
+
+uint32_t Compiler::CompileReturnSimple(uint32_t stmt) {
+  Node::Data ret = ast_.Nodes().Datas()[stmt];
+  Node::Index expr = std::get<Node::Index>(ret);
+  uint32_t v = CompileExpression(ToU32(expr));
+  // Lua convention: B = nresults + 1, so B=2 returns the one value in R[A]
+  // B = 0 -> dynamic result
+  // B = 1 -> returns 0 values
+  // B = 2 -> returns one value, in R[A]
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v, 2, 0));
+  return v;
+}
+
 uint32_t Compiler::CompileBlock(uint32_t stmt) {
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::ExtraRange range = std::get<Node::ExtraRange>(data);
-  return CompileStatements(range);
+  return CompileExpressions(range);
 }
 
 uint32_t Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
   Node::Data data = ast_.Nodes().Datas()[expr];
   Node::NodeAndNode bin_op = std::get<Node::NodeAndNode>(data);
-  uint32_t reg_left = CompileStatement(ToU32(bin_op.first));
-  uint32_t reg_right = CompileStatement(ToU32(bin_op.second));
+  uint32_t reg_left = CompileExpression(ToU32(bin_op.first));
+  uint32_t reg_right = CompileExpression(ToU32(bin_op.second));
 
   uint32_t reg_result = AllocateReg();
 
@@ -154,9 +199,10 @@ uint32_t Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
   case Node::Kind::NotEqual:
     inst = Code::CreateABCk(Code::Op::Ne, reg_result, reg_left, reg_right);
     break;
-  default:
-    assert(0 && "Unreachable at CompileBinOp");
+  default: {
+    DieLoudly{"Unreachable at CompileBinOp"}();
     break;
+  }
   }
   block_.PushInstruction(inst);
 
@@ -166,7 +212,11 @@ uint32_t Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
 uint32_t Compiler::CompileFltLiteral(uint32_t lit) {
   Node::Data data = ast_.Nodes().Datas()[lit];
   auto token = ast_.Nodes().MainTokens()[lit];
-  block_.PushConstant(Object::mkFloat(std::stod(SliceFromToken(token))));
+  return EmitLoadK(Object::mkFloat(std::stod(SliceFromToken(token))));
+}
+
+uint32_t Compiler::EmitLoadK(Object::Value v) {
+  block_.PushConstant(v);
 
   uint32_t const_index = block_.ConstantsSize() - 1;
   uint32_t target_reg = AllocateReg();
@@ -180,15 +230,7 @@ uint32_t Compiler::CompileFltLiteral(uint32_t lit) {
 uint32_t Compiler::CompileIntLiteral(uint32_t lit) {
   Node::Data data = ast_.Nodes().Datas()[lit];
   auto token = ast_.Nodes().MainTokens()[lit];
-  block_.PushConstant(Object::mkInt(std::stoi(SliceFromToken(token))));
-
-  uint32_t const_index = block_.ConstantsSize() - 1;
-  uint32_t target_reg = AllocateReg();
-
-  Code::Inst inst = Code::CreateABx(Code::Op::LoadK, target_reg, const_index);
-  block_.PushInstruction(inst);
-
-  return target_reg;
+  return EmitLoadK(Object::mkInt(std::stoi(SliceFromToken(token))));
 }
 
 std::string Compiler::SliceFromToken(Node::TokenIndex token) {

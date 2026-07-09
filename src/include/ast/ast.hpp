@@ -8,7 +8,7 @@
 #include <vector>
 
 struct ParseError {
-  enum class Kind { UnexpectedToken, MissingSemicolon };
+  enum class Kind { UnexpectedToken, MissingSemicolon, MissingClosingBrace };
 
   Kind kind;
   Node::TokenIndex token;
@@ -29,6 +29,7 @@ public:
   const NodeBuffer &Nodes() const { return nodes_; }
   bool CheckErrors() const;
   std::span<const uint32_t> ExtraData() const { return extra_data_; }
+  std::span<const ParseError> Errors() const { return errors_; }
 };
 
 #endif

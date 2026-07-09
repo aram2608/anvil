@@ -34,6 +34,7 @@ class Parser {
   void ParseRoot();
   Node::Index ParseStatements();
   Node::Index ParseBlock();
+  Node::Index ParseReturn();
   Node::Index ParseIf();
   Node::Index ParseExpressionStatement();
   Node::Index ParseExpression();
@@ -41,10 +42,13 @@ class Parser {
   Node::Index ParsePrefix();
   Node::Index ParseAtom();
   Node::TokenIndex Advance();
+  Token::Kind Peek();
   Node::TokenIndex Previous();
   Token::Kind TokenKind(const uint32_t idx);
+  void ExpectSemicolon(const size_t errs);
   Node::TokenIndex EatToken(Token::Kind);
   Node::ExtraIndex AddExtra(Node::IfExtra extra);
+  void Synchronize();
 
 public:
   Parser(std::string_view source, std::vector<Token> tokens);

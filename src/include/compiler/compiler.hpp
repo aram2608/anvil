@@ -21,11 +21,14 @@ class Compiler {
   uint32_t next_reg_ = 0;
 
   void CompileRoot();
-  uint32_t CompileStatements(Node::ExtraRange range);
-  uint32_t CompileStatement(uint32_t stmt);
+  uint32_t CompileExpressions(Node::ExtraRange range);
+  uint32_t CompileExpression(uint32_t stmt);
+  uint32_t CompileReturnSimple(uint32_t stmt);
+  uint32_t CompileIfSimple(uint32_t stmt);
   uint32_t CompileIfFull(uint32_t stmt);
   uint32_t CompileBlock(uint32_t stmt);
   uint32_t CompileBinOp(Node::Kind kind, uint32_t expr);
+  uint32_t EmitLoadK(Object::Value v);
   uint32_t CompileIntLiteral(uint32_t lit);
   uint32_t CompileFltLiteral(uint32_t lit);
   std::string SliceFromToken(Node::TokenIndex token);

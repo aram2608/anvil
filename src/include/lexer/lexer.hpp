@@ -53,6 +53,9 @@ public:
   friend void DispatchLexSemiColon(Lexer &lex);
   friend void DispatchLexBang(Lexer &lex);
   friend void DispatchLexEqual(Lexer &lex);
+  friend void DispatchLexGreater(Lexer &lex);
+  friend void DispatchLexLesser(Lexer &lex);
+  friend void DispatchLexComma(Lexer &lex);
 };
 
 #endif
