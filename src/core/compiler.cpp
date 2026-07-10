@@ -280,7 +280,7 @@ uint32_t Compiler::CompileStringLiteral(uint32_t lit) {
   auto start = ast_.Tokens().Starts()[ToU32(token)];
   auto len = ast_.Tokens().Lens()[ToU32(token)];
   // the quotes need stripped
-  return EmitLoadK(Object::mkString(source_.substr(start + 1, len - 1)));
+  return EmitLoadK(Object::mkString(source_.substr(start + 1, len - 2)));
 }
 
 uint32_t Compiler::CompileTrue(uint32_t stmt) {

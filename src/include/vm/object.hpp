@@ -1,13 +1,34 @@
 #ifndef OBJECT_HPP_
 #define OBJECT_HPP_
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string_view>
 #include <type_traits>
 
+// TODO: Implementation level details are leaking into this file
+// consider leaving declarations here and writing a definition file
+// to not break the one def. rule
+
 namespace Object {
+
+inline uint32_t HashBytes(const char *c, size_t len) {
+  // 32-bit FNV offset basis
+  uint32_t hash = 2166136261U;
+  // 32-bit FNV prime
+  const uint32_t fnv_prime = 16777619U;
+
+  for (size_t i = 0; i < len; i++) {
+    // XOR the bottom with the current byte
+    hash ^= static_cast<uint8_t>(c[i]);
+    // Multiply by the FNV prime
+    hash *= fnv_prime;
+  }
+
+  return hash;
+}
 
 enum class Kind : uint8_t {
   Void = 0,
@@ -19,24 +40,37 @@ enum class Kind : uint8_t {
 
 struct Void {};
 
-using String = const char;
-
-struct StringHeader {
+struct String {
   uint32_t len;
   uint32_t hash;
+
+  const char *data() const {
+    // Data exists at the end of the header
+    return reinterpret_cast<const char *>(this) + sizeof(String);
+  }
+
+  std::string_view view() const { return {data(), len}; }
+
+  static String *Create(std::string_view sv) {
+    // Allocate a big chunk of data for the header and the string
+    void *block = std::malloc(sizeof(String) + sv.size());
+    // cram the entire thing into the block in order
+    // the bytes should be ordered as the following
+    // len
+    // hash
+    // data*
+    String *s = new (block) String{static_cast<uint32_t>(sv.size()),
+                                   HashBytes(sv.data(), sv.size())};
+    std::memcpy(reinterpret_cast<char *>(block) + sizeof(String), sv.data(),
+                sv.size());
+    return s;
+  }
 };
 
-inline uint32_t GetStringHash(const String *s) {
-  const StringHeader *header =
-      (const StringHeader *)((const char *)s - sizeof(StringHeader));
-  return header->hash;
-}
-
-inline uint32_t GetStringLen(const String *s) {
-  const StringHeader *header =
-      (const StringHeader *)((const char *)s - sizeof(StringHeader));
-  return header->len;
-}
+// Need to keep track of padding
+// if this changes the book keeping above needs to change a bit
+// garbage collection may require a new field so adjust accordingly then
+static_assert(sizeof(String) == 8);
 
 struct Value {
   union {
@@ -72,46 +106,24 @@ inline Value mkBool(bool x) {
 }
 
 inline Value mkString(std::string_view sv) {
-  // Allocate a memory block big enough for the header and the string
-  char *block = (char *)std::malloc(sizeof(StringHeader) + sv.size() + 1);
-
-  auto hasher = [&]() {
-    // 32-bit FNV offset basis
-    uint32_t hash = 2166136261U;
-    // 32-bit FNV prime
-    const uint32_t fnv_prime = 16777619U;
-
-    for (char c : sv) {
-      // XOR the bottom with the current byte
-      hash ^= static_cast<uint8_t>(c);
-      // Multiply by the FNV prime
-      hash *= fnv_prime;
-    }
-
-    return hash;
-  };
-
-  // type punt to get the header from the block
-  StringHeader *header = (StringHeader *)block;
-  header->len = sv.size();
-  header->hash = hasher();
-
-  // [HEADER______START OF STRING]
-  char *data_ptr = block + sizeof(StringHeader);
-
-  std::memcpy(data_ptr, sv.data(), sv.length());
-
-  return Value{.as = {.s = data_ptr}, .kind = Kind::String};
+  return Value{.as = {.s = String::Create(sv)}, .kind = Kind::String};
 }
 
 inline Value mkVoid(Void x) {
   return Value{.as = {.v = x}, .kind = Kind::Void};
 }
 
-inline Value ConcatString(String *a, String *b) {
-  uint32_t len_a = GetStringLen(a);
-  uint32_t len_b = GetStringLen(b);
+inline std::string_view asView(String *s) { return s->view(); }
 
+inline Value ConcatString(String *a, String *b) {
+  uint32_t len_a = a->len;
+  uint32_t len_b = b->len;
+
+  // TODO: pretty sure i can just take the lhs hash and apply
+  // the rehash for rhs
+  // ConcatHash(lhs hash, rhs hash, char* b, size_t len_b)
+  // since the first iteration simply computes the exact same hash
+  // that the lhs has
   auto hasher = [&]() {
     // 32-bit FNV offset basis
     uint32_t hash = 2166136261U;
@@ -120,14 +132,14 @@ inline Value ConcatString(String *a, String *b) {
 
     for (size_t i = 0; i < len_a; ++i) {
       // XOR the bottom with the current byte
-      hash ^= static_cast<uint8_t>(a[i]);
+      hash ^= static_cast<uint8_t>(a->data()[i]);
       // Multiply by the FNV prime
       hash *= fnv_prime;
     }
 
     for (size_t i = 0; i < len_b; ++i) {
       // XOR the bottom with the current byte
-      hash ^= static_cast<uint8_t>(b[i]);
+      hash ^= static_cast<uint8_t>(b->data()[i]);
       // Multiply by the FNV prime
       hash *= fnv_prime;
     }
@@ -135,16 +147,14 @@ inline Value ConcatString(String *a, String *b) {
     return hash;
   };
 
-  char *block = (char *)std::malloc(sizeof(StringHeader) + len_a + len_b + 1);
-  StringHeader *header = (StringHeader *)block;
-  header->len = len_a + len_b;
-  header->hash = hasher();
+  void *block = std::malloc(sizeof(String) + len_a + len_b);
 
-  char *data_ptr = block + sizeof(StringHeader);
-  std::memcpy(data_ptr, a, len_a);
-  std::memcpy(data_ptr + len_a, b, len_b);
+  String *s = new (block) String{len_a + len_b, hasher()};
+  char *buffer = reinterpret_cast<char *>(block);
+  std::memcpy(buffer + sizeof(String), a, len_a);
+  std::memcpy(buffer + sizeof(String) + len_a, b, len_b);
 
-  return Value{.as = {.s = data_ptr}, .kind = Kind::String};
+  return Value{.as = {.s = s}, .kind = Kind::String};
 }
 
 inline bool isBool(const Value &v) { return v.kind == Kind::Bool; }
@@ -159,13 +169,13 @@ inline bool isString(const Value &v) { return v.kind == Kind::String; }
 inline bool isZero(const Value &v) {
   switch (v.kind) {
   case Kind::Float:
-    return v.as.f == 0;
+    return v.asFloat() == 0;
   case Kind::Int:
-    return v.as.i == 0;
+    return v.asInt() == 0;
+  case Kind::String:
+    return v.asString()->len == 0;
   case Kind::Void:
   case Kind::Bool:
-  case Kind::String:
-    return GetStringLen(v.as.s) == 0;
     return false;
   }
 }
