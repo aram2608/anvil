@@ -14,9 +14,8 @@
 
 namespace Object {
 
-inline uint32_t HashBytes(const char *c, size_t len) {
-  // 32-bit FNV offset basis
-  uint32_t hash = 2166136261U;
+inline uint32_t HashBytes(const char *c, size_t len,
+                          uint32_t hash = 2166136261U /* FNV offset basis */) {
   // 32-bit FNV prime
   const uint32_t fnv_prime = 16777619U;
 
@@ -56,8 +55,7 @@ struct String {
     void *block = std::malloc(sizeof(String) + sv.size());
     // cram the entire thing into the block in order
     // the bytes should be ordered as the following
-    // len
-    // hash
+    // header
     // data*
     String *s = new (block) String{static_cast<uint32_t>(sv.size()),
                                    HashBytes(sv.data(), sv.size())};
@@ -89,6 +87,7 @@ struct Value {
 };
 
 static_assert(sizeof(Value) == 16, "8B payload + tag padded to 16");
+// needs to stay small so the VM can rip through values easy peasy
 static_assert(std::is_trivially_copyable_v<Value>);
 
 inline bool checkType(const Value &v, Kind k) { return v.kind == k; }
@@ -116,43 +115,14 @@ inline Value mkVoid(Void x) {
 inline std::string_view asView(String *s) { return s->view(); }
 
 inline Value ConcatString(String *a, String *b) {
-  uint32_t len_a = a->len;
-  uint32_t len_b = b->len;
+  uint32_t len = a->len + b->len;
 
-  // TODO: pretty sure i can just take the lhs hash and apply
-  // the rehash for rhs
-  // ConcatHash(lhs hash, rhs hash, char* b, size_t len_b)
-  // since the first iteration simply computes the exact same hash
-  // that the lhs has
-  auto hasher = [&]() {
-    // 32-bit FNV offset basis
-    uint32_t hash = 2166136261U;
-    // 32-bit FNV prime
-    const uint32_t fnv_prime = 16777619U;
+  void *block = std::malloc(sizeof(String) + len);
 
-    for (size_t i = 0; i < len_a; ++i) {
-      // XOR the bottom with the current byte
-      hash ^= static_cast<uint8_t>(a->data()[i]);
-      // Multiply by the FNV prime
-      hash *= fnv_prime;
-    }
-
-    for (size_t i = 0; i < len_b; ++i) {
-      // XOR the bottom with the current byte
-      hash ^= static_cast<uint8_t>(b->data()[i]);
-      // Multiply by the FNV prime
-      hash *= fnv_prime;
-    }
-
-    return hash;
-  };
-
-  void *block = std::malloc(sizeof(String) + len_a + len_b);
-
-  String *s = new (block) String{len_a + len_b, hasher()};
-  char *buffer = reinterpret_cast<char *>(block);
-  std::memcpy(buffer + sizeof(String), a, len_a);
-  std::memcpy(buffer + sizeof(String) + len_a, b, len_b);
+  String *s = new (block) String{len, HashBytes(b->data(), b->len, a->hash)};
+  char *dst = reinterpret_cast<char *>(block) + sizeof(String);
+  std::memcpy(dst, a->data(), a->len);
+  std::memcpy(dst + a->len, b->data(), a->len);
 
   return Value{.as = {.s = s}, .kind = Kind::String};
 }
