@@ -7,6 +7,8 @@
 #include <span>
 #include <vector>
 
+namespace Anvil {
+
 class TokenBuffer {
   std::vector<Token::Kind> kind_;
   std::vector<int> start_;
@@ -34,5 +36,7 @@ public:
   std::span<const Node::TokenIndex> MainTokens() const { return main_token_; }
   std::span<const Node::Data> Datas() const { return data_; }
 };
+
+} // namespace Anvil
 
 #endif

@@ -9,6 +9,10 @@
 #include <string_view>
 #include <utility>
 
+using namespace Anvil;
+
+namespace {
+
 // We don't need a full hash map for keywords
 // So we can make a "simple" wrapper around a key (string)
 // and value (Token::Kind) pairs
@@ -40,10 +44,13 @@ static constexpr auto kKeyWords =
         {"proc", Token::Kind::FuncDecl},
         {"else", Token::Kind::Else},
         {"return", Token::Kind::Return},
+        {"true", Token::Kind::TrueLiteral},
+        {"false", Token::Kind::FalseLiteral},
     })};
 
-Lexer::Lexer(std::string_view source)
-    : source_{source}, start_(0), current_(0), line_(1) {}
+} // namespace
+
+Lexer::Lexer(std::string_view source) : source_{source} {}
 
 std::vector<Token> Lexer::ScanTokens() {
   while (!IsEnd()) {
@@ -57,29 +64,29 @@ std::vector<Token> Lexer::ScanTokens() {
 using DispatchFunctionT = void(Lexer &lexer);
 using DispatchTableT = std::array<DispatchFunctionT *, 256>;
 
-void DispatchLexError(Lexer &lex) { lex.PushToken(Token::Kind::Error); }
+void Anvil::DispatchLexError(Lexer &lex) { lex.PushToken(Token::Kind::Error); }
 
-void DispatchLexSlash(Lexer &lex) {
+void Anvil::DispatchLexSlash(Lexer &lex) {
   lex.OpAssign(Token::Kind::SlashEqual, Token::Kind::Slash);
 }
 
-void DispatchLexPlus(Lexer &lex) {
+void Anvil::DispatchLexPlus(Lexer &lex) {
   lex.OpAssign(Token::Kind::PlusEqual, Token::Kind::Plus);
 }
 
-void DispatchLexStar(Lexer &lex) {
+void Anvil::DispatchLexStar(Lexer &lex) {
   lex.OpAssign(Token::Kind::StarEqual, Token::Kind::Star);
 }
 
-void DispatchLexMinus(Lexer &lex) {
+void Anvil::DispatchLexMinus(Lexer &lex) {
   lex.OpAssign(Token::Kind::MinusEqual, Token::Kind::Minus);
 }
 
-void DispatchLexColon(Lexer &lex) {
+void Anvil::DispatchLexColon(Lexer &lex) {
   lex.OpAssign(Token::Kind::ColonEqual, Token::Kind::Colon);
 }
 
-void DispatchLexIdentifier(Lexer &lex) {
+void Anvil::DispatchLexIdentifier(Lexer &lex) {
   while (!lex.IsEnd() && std::isalnum(static_cast<unsigned char>(lex.Peek()))) {
     lex.Advance();
   }
@@ -87,12 +94,11 @@ void DispatchLexIdentifier(Lexer &lex) {
   lex.PushToken(kind.value_or(Token::Kind::Identifier));
 }
 
-void DispatchLexNumber(Lexer &lex) {
+void Anvil::DispatchLexNumber(Lexer &lex) {
   while (lex.InNumber()) {
     lex.Advance();
   }
-  if (lex.Peek() == '.') {
-    lex.Advance(); // eat the '.'
+  if (lex.Match('.')) {
     while (lex.InNumber()) {
       lex.Advance();
     }
@@ -102,51 +108,71 @@ void DispatchLexNumber(Lexer &lex) {
   }
 }
 
-void DispatchLexDot(Lexer &lex) { lex.PushToken(Token::Kind::Dot); }
+void Anvil::DispatchLexDot(Lexer &lex) { lex.PushToken(Token::Kind::Dot); }
 
-void DispatchLexWhiteSpace(Lexer &lex) {}
+void Anvil::DispatchLexWhiteSpace(Lexer &lex) {}
 
-void DispatchLexNewLine(Lexer &lex) { lex.line_ += 1; }
+void Anvil::DispatchLexNewLine(Lexer &lex) { lex.line_ += 1; }
 
-void DispatchLexLeftParen(Lexer &lex) { lex.PushToken(Token::Kind::LeftParen); }
+void Anvil::DispatchLexLeftParen(Lexer &lex) {
+  lex.PushToken(Token::Kind::LeftParen);
+}
 
-void DispatchLexLeftBracket(Lexer &lex) {
+void Anvil::DispatchLexLeftBracket(Lexer &lex) {
   lex.PushToken(Token::Kind::LeftBracket);
 }
 
-void DispatchLexLeftBrace(Lexer &lex) { lex.PushToken(Token::Kind::LeftBrace); }
+void Anvil::DispatchLexLeftBrace(Lexer &lex) {
+  lex.PushToken(Token::Kind::LeftBrace);
+}
 
-void DispatchLexRightParen(Lexer &lex) {
+void Anvil::DispatchLexRightParen(Lexer &lex) {
   lex.PushToken(Token::Kind::RightParen);
 }
 
-void DispatchLexRightBracket(Lexer &lex) {
+void Anvil::DispatchLexRightBracket(Lexer &lex) {
   lex.PushToken(Token::Kind::RightBracket);
 }
 
-void DispatchLexRightBrace(Lexer &lex) {
+void Anvil::DispatchLexRightBrace(Lexer &lex) {
   lex.PushToken(Token::Kind::RightBrace);
 }
 
-void DispatchLexBang(Lexer &lex) {
+void Anvil::DispatchLexBang(Lexer &lex) {
   lex.OpAssign(Token::Kind::BangEqual, Token::Kind::Bang);
 }
 
-void DispatchLexSemiColon(Lexer &lex) { lex.PushToken(Token::Kind::SemiColon); }
+void Anvil::DispatchLexSemiColon(Lexer &lex) {
+  lex.PushToken(Token::Kind::SemiColon);
+}
 
-void DispatchLexEqual(Lexer &lex) {
+void Anvil::DispatchLexEqual(Lexer &lex) {
   lex.OpAssign(Token::Kind::EqualEqual, Token::Kind::Equal);
 }
 
-void DispatchLexLesser(Lexer &lex) {
+void Anvil::DispatchLexLesser(Lexer &lex) {
   lex.OpAssign(Token::Kind::LesserEqual, Token::Kind::Lesser);
 }
 
-void DispatchLexGreater(Lexer &lex) {
+void Anvil::DispatchLexGreater(Lexer &lex) {
   lex.OpAssign(Token::Kind::GreaterEqual, Token::Kind::Greater);
 }
 
-void DispatchLexComma(Lexer &lex) { lex.PushToken(Token::Kind::Comma); }
+void Anvil::DispatchLexDoubleQuote(Lexer &lex) {
+  while (!lex.IsEnd() && lex.Peek() != '"') {
+    lex.Advance();
+  }
+
+  if (lex.IsEnd()) {
+    lex.PushToken(Token::Kind::Error); // unterminated string
+    return;
+  }
+
+  lex.Advance();
+  lex.PushToken(Token::Kind::StringLiteral);
+}
+
+void Anvil::DispatchLexComma(Lexer &lex) { lex.PushToken(Token::Kind::Comma); }
 
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
@@ -177,9 +203,7 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table['>'] = &DispatchLexGreater;
   table['<'] = &DispatchLexLesser;
   table[','] = &DispatchLexComma;
-
-  // LeftBrace,
-  // RightBrace,
+  table['"'] = &DispatchLexDoubleQuote;
 
   for (unsigned char c = 'a'; c <= 'z'; ++c) {
     table[c] = &DispatchLexIdentifier;
@@ -237,7 +261,7 @@ char Lexer::Peek() {
 }
 
 char Lexer::PeekNext() {
-  if (!IsEnd()) {
+  if (current_ + 1 < source_.length()) {
     return source_[current_ + 1];
   }
   return '\0';

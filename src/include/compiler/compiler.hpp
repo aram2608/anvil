@@ -5,8 +5,12 @@
 #include "ast/node.hpp"
 #include "compiler/block.hpp"
 #include "compiler/bytecode.hpp"
+#include "strpool/strpool.hpp"
 #include <cstdint>
 #include <string_view>
+#include <vector>
+
+namespace Anvil {
 
 struct ExprResult {
   enum class Kind { Constant, Register, Jmp /* Local, Global, ... */ };
@@ -14,15 +18,24 @@ struct ExprResult {
   uint32_t idx; // k-index or register, depending on kind
 };
 
+struct Local {
+  StrPool::Index idx;
+  uint32_t depth;
+};
+
 class Compiler {
   std::string_view source_;
   Ast ast_;
   Block block_;
   uint32_t next_reg_ = 0;
+  StrPool strings_;
+  std::vector<Local> locals_;
+  uint32_t depth_ = 0;
 
   void CompileRoot();
   uint32_t CompileExpressions(Node::ExtraRange range);
   uint32_t CompileExpression(uint32_t stmt);
+  uint32_t CompileAssign(uint32_t stmt);
   uint32_t CompileReturnSimple(uint32_t stmt);
   uint32_t CompileIfSimple(uint32_t stmt);
   uint32_t CompileIfFull(uint32_t stmt);
@@ -31,15 +44,25 @@ class Compiler {
   uint32_t EmitLoadK(Object::Value v);
   uint32_t CompileIntLiteral(uint32_t lit);
   uint32_t CompileFltLiteral(uint32_t lit);
-  std::string SliceFromToken(Node::TokenIndex token);
+  uint32_t CompileStringLiteral(uint32_t stmt);
+  uint32_t CompileIdent(uint32_t ident);
+  uint32_t CompileTrue(uint32_t stmt);
+  uint32_t CompileFalse(uint32_t stmt);
+  std::string_view SliceFromToken(Node::TokenIndex token);
+  int64_t IntFromToken(Node::TokenIndex token);
+  double FloatFromToken(Node::TokenIndex token);
   uint32_t AllocateReg();
   void FreeReg(uint32_t keep);
   uint32_t EmitJump();
   void PatchJumpToHere(uint32_t jump_idx);
+  void EnterScope();
+  void ExitScope();
 
 public:
   Compiler(std::string_view source, Ast ast);
   Block Compile();
 };
+
+} // namespace Anvil
 
 #endif

@@ -7,6 +7,8 @@
 #include <array>
 #include <cstdint>
 
+namespace Anvil {
+
 class VM {
   uint32_t pc_ = 0;
   Block block_;
@@ -18,5 +20,7 @@ public:
   void Run();
   Object::Value MockRun();
 };
+
+} // namespace Anvil
 
 #endif

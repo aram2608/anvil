@@ -6,9 +6,10 @@
 #include "token/token.hpp"
 #include <cstdint>
 #include <cstring>
-#include <string>
 #include <string_view>
 #include <vector>
+
+namespace Anvil {
 
 class Parser {
   std::string_view source_;
@@ -56,4 +57,5 @@ public:
   Ast Parse();
 };
 
+} // namespace Anvil
 #endif

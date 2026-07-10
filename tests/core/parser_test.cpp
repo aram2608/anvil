@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 #include <vector>
 
+using namespace Anvil;
+
 Ast RunParser(const char *src) {
   Lexer l{src};
 
@@ -106,4 +108,12 @@ TEST(Parser, ParseReturn) {
                                   K::Block,
                                   K::IfSimple,
                               });
+}
+
+TEST(Parser, ParseAssign) {
+  ExpectKinds("a := 4;", {K::Root, K::Ident, K::Int, K::Assign});
+}
+
+TEST(Parser, ParseReassign) {
+  ExpectKinds("a = 4;", {K::Root, K::Ident, K::Int, K::Reassign});
 }

@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 #include <vector>
 
+using namespace Anvil;
+
 Block RunCompiler(const char *src) {
   Lexer l{src};
 

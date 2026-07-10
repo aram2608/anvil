@@ -8,8 +8,8 @@ class DieLoudly {
 
 public:
   explicit DieLoudly(const char *msg) : msg(msg) {}
-  void operator()() const {
-    std::cout << msg << std::endl;
+  [[noreturn]] void operator()() const {
+    std::cerr << msg << std::endl;
     std::abort();
   }
 };

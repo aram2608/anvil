@@ -7,6 +7,8 @@
 #include <span>
 #include <vector>
 
+namespace Anvil {
+
 class Block {
   std::vector<Object::Value> k_; // Constants
   std::vector<Code::Inst> code_; // Opcodes
@@ -22,5 +24,7 @@ public:
   std::span<const int> get_lines() const { return line_info_; }
   Code::Inst &InstAt(uint32_t idx) { return code_[idx]; }
 };
+
+} // namespace Anvil
 
 #endif

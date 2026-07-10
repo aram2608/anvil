@@ -48,6 +48,7 @@ isJ                           sJ (signed)(25)            |   Op(7)     |
   the written unsigned value minus K, where K is half (rounded down) the
   maximum value for the corresponding unsigned argument.
 ===========================================================================*/
+namespace Anvil {
 
 namespace Code {
 
@@ -349,4 +350,6 @@ constexpr Inst CreatesJ(Op o, int32_t sj, uint32_t k = 0) {
 }
 
 } // namespace Code
+
+} // namespace Anvil
 #endif

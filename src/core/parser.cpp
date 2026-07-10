@@ -5,6 +5,9 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <variant>
+
+using namespace Anvil;
 
 namespace {
 
@@ -214,17 +217,14 @@ Node::Index Parser::ParsePrefix() {
         .main_token = Advance(),
         .data = Node::Index{ParsePrefix()},
     });
-    break;
   case Token::Kind::Minus:
     return AddNode({
         .kind = Node::Kind::Negate,
         .main_token = Advance(),
         .data = Node::Index{ParsePrefix()},
     });
-    break;
   default:
     return ParseAtom();
-    break;
   }
 }
 
@@ -236,14 +236,36 @@ Node::Index Parser::ParseAtom() {
         .main_token = Advance(),
         .data = std::monostate{},
     });
-    break;
   case Token::Kind::FloatLiteral:
     return AddNode({
         .kind = Node::Kind::Float,
         .main_token = Advance(),
         .data = std::monostate{},
     });
-    break;
+  case Token::Kind::TrueLiteral:
+    return AddNode({
+        .kind = Node::Kind::True,
+        .main_token = Advance(),
+        .data = std::monostate{},
+    });
+  case Token::Kind::FalseLiteral:
+    return AddNode({
+        .kind = Node::Kind::False,
+        .main_token = Advance(),
+        .data = std::monostate{},
+    });
+  case Token::Kind::StringLiteral:
+    return AddNode({
+        .kind = Node::Kind::String,
+        .main_token = Advance(),
+        .data = std::monostate{},
+    });
+  case Token::Kind::Identifier:
+    return AddNode({
+        .kind = Node::Kind::Ident,
+        .main_token = Advance(),
+        .data = std::monostate{},
+    });
   default:
     errors_.push_back({
         .kind = ParseError::Kind::UnexpectedToken,

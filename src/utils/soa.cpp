@@ -1,5 +1,7 @@
 #include "soa/soa.hpp"
 
+using namespace Anvil;
+
 TokenBuffer::TokenBuffer(std::vector<Token> &tokens) {
   kind_.resize(tokens.size());
   start_.resize(tokens.size());

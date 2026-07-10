@@ -1,17 +1,18 @@
 #ifndef LEXER_HPP_
 #define LEXER_HPP_
 #include "token/token.hpp"
-#include <string>
 #include <string_view>
 #include <vector>
+
+namespace Anvil {
 
 class Lexer {
 private:
   std::vector<Token> tokens_;
   std::string_view source_; // Extern. owned data
-  int current_;
-  int start_;
-  int line_;
+  int current_{0};
+  int start_{0};
+  int line_{1};
 
   void Scan();
   char Advance();
@@ -56,6 +57,9 @@ public:
   friend void DispatchLexGreater(Lexer &lex);
   friend void DispatchLexLesser(Lexer &lex);
   friend void DispatchLexComma(Lexer &lex);
+  friend void DispatchLexDoubleQuote(Lexer &lex);
 };
+
+} // namespace Anvil
 
 #endif

@@ -2,6 +2,8 @@
 #include "compiler/bytecode.hpp"
 #include <format>
 
+using namespace Anvil;
+
 std::string Dis::Disassemble(const Block &block) {
   std::string out;
   auto code = block.get_code();

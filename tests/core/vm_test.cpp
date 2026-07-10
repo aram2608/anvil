@@ -1,5 +1,3 @@
-#include "compiler/block.hpp"
-#include "compiler/bytecode.hpp"
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
@@ -7,6 +5,8 @@
 #include "vm/vm.hpp"
 #include <gtest/gtest.h>
 #include <vector>
+
+using namespace Anvil;
 
 Object::Value RunMockVM(const char *src) {
   Lexer l{src};

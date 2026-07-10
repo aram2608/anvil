@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <variant>
 
+namespace Anvil {
+
 template <typename T>
 inline uint32_t ToU32(T index) {
   return static_cast<uint32_t>(index);
@@ -57,6 +59,7 @@ struct Node {
     IfFull,
     ReturnSimple,
     ReturnMulti,
+    Ident,
     Block,
     Add,
     Sub,
@@ -64,6 +67,9 @@ struct Node {
     Div,
     Int,
     Float,
+    String,
+    True,
+    False,
     Reassign,
     Assign,
     Equal,
@@ -86,5 +92,7 @@ struct Node {
     Index else_expr;
   };
 };
+
+} // namespace Anvil
 
 #endif

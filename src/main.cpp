@@ -24,17 +24,17 @@ int main(int argc, char **argv) {
     std::optional<std::string> source_or_fail = ReadFile(argv[1]);
     if (source_or_fail.has_value()) {
       std::string source = source_or_fail.value();
-      Lexer l{source};
+      Anvil::Lexer l{source};
       std::vector<Token> tokens = l.ScanTokens();
-      Parser p{source, tokens};
-      Ast ast = p.Parse();
+      Anvil::Parser p{source, tokens};
+      Anvil::Ast ast = p.Parse();
       if (ast.CheckErrors()) {
         return 1;
       }
-      Compiler c{source, ast};
-      Block b = c.Compile();
-      std::cout << Dis::Disassemble(b);
-      VM vm{b};
+      Anvil::Compiler c{source, ast};
+      Anvil::Block b = c.Compile();
+      std::cout << Anvil::Dis::Disassemble(b);
+      Anvil::VM vm{b};
       vm.Run();
     } else {
       std::cout << argv[1] << " could not be opened\n";

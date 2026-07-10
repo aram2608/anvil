@@ -28,6 +28,8 @@ struct Token {
     IntLiteral,
     FloatLiteral,
     StringLiteral,
+    TrueLiteral,
+    FalseLiteral,
 
     // Other
     Colon,

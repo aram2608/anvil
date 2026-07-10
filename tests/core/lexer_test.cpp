@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 #include <vector>
 
+using namespace Anvil;
+
 std::vector<Token> RunLexer(std::string source) {
   Lexer lex{source};
   return lex.ScanTokens();

@@ -2,6 +2,8 @@
 #include "ast/node.hpp"
 #include <iostream>
 
+using namespace Anvil;
+
 Ast::Ast(std::string_view source, TokenBuffer tokens, NodeBuffer nodes,
          std::vector<uint32_t> extra_data, std::vector<ParseError> errors)
     : source_{source}, tokens_{tokens}, nodes_{nodes}, extra_data_{extra_data},

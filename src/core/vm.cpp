@@ -6,21 +6,33 @@
 #include <iostream>
 #include <stdexcept>
 
+using namespace Anvil;
+
 namespace {
+
+class RunTimeError : public std::runtime_error {
+public:
+  explicit RunTimeError(std::string message)
+      : std::runtime_error{message.c_str()} {}
+};
 
 // TODO: Ponder on this more
 // Implicit promotion, perhaps we can error instead not sure
 template <typename Fn>
 inline Object::Value Arith(const Object::Value &a, const Object::Value &b,
                            Fn op) {
+  if (Object::isVoid(a) || Object::isVoid(b)) {
+    throw RunTimeError{"Invalid operation for type `Void`"};
+  }
+
   if (Object::isInt(a) && Object::isInt(b)) {
-    return Object::mkInt(op(a.as.i, b.as.i));
+    return Object::mkInt(op(a.asInt(), b.asInt()));
   } else if (Object::isFloat(a) && Object::isFloat(b)) {
-    return Object::mkFloat(op(a.as.f, b.as.f));
+    return Object::mkFloat(op(a.asFloat(), b.asFloat()));
   } else if (Object::isFloat(a) && Object::isInt(b)) {
-    return Object::mkFloat(op(a.as.f, b.as.i));
+    return Object::mkFloat(op(a.asFloat(), b.asInt()));
   } else if (Object::isInt(a) && Object::isFloat(b)) {
-    return Object::mkFloat(op(a.as.i, b.as.f));
+    return Object::mkFloat(op(a.asInt(), b.asFloat()));
   }
   assert(0 && "Unreachable at Arith");
 }
@@ -28,6 +40,11 @@ inline Object::Value Arith(const Object::Value &a, const Object::Value &b,
 template <typename Fn>
 inline Object::Value Comp(const Object::Value &a, const Object::Value &b,
                           Fn op) {
+
+  if (Object::isVoid(a) || Object::isVoid(b)) {
+    throw RunTimeError{"Invalid operation for type `Void`"};
+  }
+
   if (Object::isInt(a) && Object::isInt(b)) {
     return Object::mkBool(op(a.as.i, b.as.i));
   } else if (Object::isFloat(a) && Object::isFloat(b)) {
@@ -50,12 +67,6 @@ inline bool isTruthy(const Object::Value &x) {
   }
   assert(0 && "Unreachable at isTruthy");
 }
-
-class RunTimeError : public std::runtime_error {
-public:
-  explicit RunTimeError(std::string message)
-      : std::runtime_error{message.c_str()} {}
-};
 
 } // namespace
 
@@ -109,10 +120,16 @@ Object::Value VM::MockRun() {
       regs_[Code::GetA(i)] = Comp(regs_[Code::GetB(i)], regs_[Code::GetC(i)],
                                   std::not_equal_to<>{});
       break;
-    case Code::Op::Add:
-      regs_[Code::GetA(i)] =
-          Arith(regs_[Code::GetB(i)], regs_[Code::GetC(i)], std::plus<>{});
-      break;
+    case Code::Op::Add: {
+      const Object::Value a = regs_[Code::GetB(i)];
+      const Object::Value b = regs_[Code::GetC(i)];
+
+      if (Object::isString(a) && Object::isString(b)) {
+        regs_[Code::GetA(i)] = Object::ConcatString(a.asString(), b.asString());
+      } else {
+        regs_[Code::GetA(i)] = Arith(a, b, std::plus<>{});
+      }
+    } break;
     case Code::Op::Sub:
       regs_[Code::GetA(i)] =
           Arith(regs_[Code::GetB(i)], regs_[Code::GetC(i)], std::minus<>{});
