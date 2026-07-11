@@ -1,74 +1,121 @@
-# Anvil TODO
+# TODO: Builtins then Functions
 
-- **Scoping: compile-time resolution, locals are registers.** Lua/clox-bytecode
-  style, NOT the jlox `Environment`-with-`enclosing` runtime chain. Compiler
-  keeps `vector<Local>{name_token, depth}` + `scope_depth_`; resolution walks
-  backward (shadowing for free); undeclared variable = compile-time error.
+Order matters: builtins first because `@print` needs the calling convention
+(args in consecutive registers, a call opcode) but none of the frame machinery.
+User functions then inherit conventions that already work.
 
-## Next up: variables (`:=` declare, `=` reassign)
+## User functions
 
-Parser:
-- [ ] `Node::Kind::Ident` + `Identifier` case in `ParseAtom`
-      (lexer already emits `Token::Kind::Identifier`; precedence table already
-      has `ColonEqual`/`Equal` entries)
-- [ ] Tests: declare, reassign, shadowing, use-in-expression
+### 1. Proto object
 
-Compiler:
-- [ ] `Local` struct + `locals_` vector + `scope_depth_`
-- [ ] Declare: compile RHS, leave register allocated, push binding —
-      the RHS register *is* the variable's slot
-- [ ] Read: `ResolveLocal` walks `locals_` backward, returns register index
-      directly (no load instruction needed)
-- [ ] Reassign: compile RHS, `Move local_reg, rhs_reg`
-- [ ] Scope enter/exit in `CompileBlock`: bump depth on entry; on exit pop
-      locals at current depth, `FreeReg(locals_.size())`
-- [ ] Block value crosses scope exit: `Move` last expression's value down to
-      block base before popping locals (same dance as the `if` codegen)
-- [ ] Per-statement temp cleanup: `FreeReg(locals_.size())` after each
-      non-final statement in `CompileExpressions` (currently temporaries leak
-      upward across statements)
-- [ ] LHS validation: `Assign`/`Reassign` must have an `Ident` LHS —
-      `1 + 2 = 3;` parses today, needs a compile error
-- [ ] Undeclared-variable error (resolve fails) — needs a compiler error
-      mechanism (currently only the parser collects errors)
+```cpp
+struct Proto {
+  Block block;
+  uint8_t arity;
+  uint8_t max_regs; // frame size, compiler knows this after compiling the body
+};
+```
 
-## Open design questions
+- `Kind::Function`, `Proto *p` in the Value union (still 16 bytes)
+- ownership: Block is currently copied by value into the VM; protos need stable
+  addresses. Module/script owns `std::vector<std::unique_ptr<Proto>>`, Values
+  point in. This list plus the string table is the future GC root set.
 
-- **Redeclaration in same scope**: `x := 1; x := 2;` — error (clox) or allowed
-  shadowing anywhere (Lua)? Leaning error: friendlier, and the backward walk
-  makes the same-depth duplicate check trivial.
-- **Name comparison**: `Local` stores a token index; comparing means slicing
-  source. Add a `string_view` compare (avoid `SliceFromToken`'s allocation).
-- **Compiler error reporting**: parser has `errors_`; compiler currently only
-  has `DieLoudly`. Variables introduce the first user-facing compile errors
-  (undeclared var, bad assignment target) — need a real error path, not abort.
-- **What is `Test`'s truthiness for Void/non-bool values?** Matters once
-  variables let arbitrary values reach `if` conditions.
+### 2. Nested compilation
 
-## Known debts (deferred on purpose)
+Function literal spins up a fresh function context sharing source/ast/strtable.
+Push/pop a FuncState instead of recursing with a whole new Compiler; too much
+state lives in Compiler members to thread through constructors.
 
-- Constant table dedup — every literal/void pushes a new constant
-  (`1 + 1` stores `1` twice). Intern in `PushConstant` eventually; Void is the
-  easy singleton case.
-- `std::stoi`/`std::stod` throw on oversized literals — user input can crash
-  the compiler. `std::from_chars` + a proper error.
-- `CompileBinOp` switch duplication (own TODO in code) — table or helper.
-- `ParseAtom` unexpected-token produces two errors per mistake
-  (UnexpectedToken + suppressed follow-ons are handled, but the atom itself
-  doesn't sync). Acceptable cascade for now.
-- Multi-return (`ReturnMulti`) parses but compiler asserts — blocked on tuples.
-- Bare `return;` unsupported — blocked on deciding void-function semantics;
-  `CompileReturnSimple`'s `std::get<Node::Index>` will throw if parser ever
-  emits monostate data. Emit `Ret` with B=1 when it lands.
+```cpp
+struct FuncState {
+  Block block;
+  uint32_t next_reg = 0;
+  std::vector<Local> locals;
+  uint32_t depth = 0;
+};
+// Compiler holds std::vector<FuncState> and the current one is .back()
+```
 
-## Later milestones
+Syntax leaning: function literal as an expression, fits everything-is-an-expression:
 
-- **Functions**: call frames, per-function register windows (`next_reg_` is
-  global now), `Ret` B field becomes real (result copy to caller frame),
-  calling convention between `Call` and `Ret`, reachability ("did every path
-  return?"), implicit last-value return falls out of Ruby rule.
-- **Closures**: compile-time resolution means captured variables need
-  upvalues (Lua mechanism). Known cost, standard road, pay when functions land.
-- **Tuples / multi-value**: unblocks `ReturnMulti` (`return 1, 2;`).
-- **Dead code elimination**: stray `Move`s after `Ret` in branches, code after
-  guaranteed returns. Cosmetic until functions.
+```
+add := fn(a, b) { a + b };
+```
+
+### 3. Frames in the VM
+
+Register windows over one big register stack, Lua style.
+
+```cpp
+struct Frame {
+  uint32_t return_pc;
+  uint32_t base;        // window start into regs_
+  uint32_t result_reg;  // caller register that receives the return value
+  const Proto *proto;
+};
+std::vector<Frame> frames_;
+```
+
+- every `regs_[n]` in the interpreter loop becomes `regs_[base + n]`
+- main script is frame 0 with base 0, so nothing observable changes until the
+  first call happens
+
+```
+Call  A  B  C    ; A = reg holding the function, args at A+1 .. A+B
+```
+
+```cpp
+case Code::Op::Call: {
+  // callee window starts where the args already are: base + A + 1
+  // args are its registers 0..B-1 for free, this is why consecutive
+  // args from phase 1 pay off
+  frames_.push_back({pc_, base + Code::GetA(i) + 1, base + Code::GetA(i), proto});
+  pc_ = 0; // switch executing block to proto->block
+} break;
+```
+
+`Ret` reworked: copy result into `frames_.back().result_reg`, pop the frame,
+restore pc and block. Empty frame stack means program result (what MockRun
+returns today).
+
+### 4. Guards
+
+- [ ] frame depth cap, throw RunTimeError "stack overflow" instead of walking off regs_
+- [ ] regs_ becomes growable or gets a high water check per call (base + max_regs <= capacity)
+
+## Compiler hygiene
+
+### Guardrails first, cheap
+
+- [ ] assert `next_reg_ == locals_.size()` at every statement boundary in
+      CompileExpressions; would have caught the register drift at the exact
+      statement that broke the invariant instead of five statements later
+
+### ExprResult conversion, in phases
+
+Stop bubbling raw uint32_t whose meaning depends on context. Thread ExprResult
+(already stubbed in compiler.hpp) with discharge helpers, expdesc style.
+
+```cpp
+struct ExprResult {
+  enum class Kind { Constant, Local, Register, Jmp };
+  Kind kind;
+  uint32_t idx; // k-index, local slot, temp register, or jump pc
+};
+
+uint32_t ExprToAnyReg(const ExprResult &e);  // local uses its slot, constant LoadKs a temp
+uint32_t ExprToNextReg(const ExprResult &e); // force to fresh top reg: call args, block results
+void FreeExpr(const ExprResult &e);          // pop only temps (idx >= locals_.size()),
+                                             // assert stack order: idx == next_reg_ - 1
+```
+
+- [ ] phase 1: mechanical conversion, Local and Register kinds only, no
+      behavior change; verify by diffing disassembly before and after
+- [ ] phase 2: literals return Constant without emitting; kills the
+      LoadK-then-Move pattern in assigns and opens the constant folding seam in
+      CompileBinOp (both operands Constant means fold, emit nothing)
+- [ ] phase 3: Jmp kind, deferred until `&&` and `||` land since those force
+      the true/false patch-list machinery anyway; then comparisons can fuse
+      into Test instead of Eq-to-register-then-Test
+

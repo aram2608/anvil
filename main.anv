@@ -4,15 +4,13 @@ if 1 == 1 {
  1 + 2;
 }
 
-if 1 > 0 {
-  return 1 + 5;
-}
-
 foo := 4;
-1 + foo;
-
-foo + 4.0;
+bar := foo + 4.0;
 
 hello := "hello";
 
 world := hello + "world";
+
+if hello == "hello" {
+    @printf("yes");
+}

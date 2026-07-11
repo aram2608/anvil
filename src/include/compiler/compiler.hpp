@@ -6,6 +6,7 @@
 #include "compiler/block.hpp"
 #include "compiler/bytecode.hpp"
 #include "strpool/strpool.hpp"
+#include "strtable/strtable.hpp"
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -13,10 +14,12 @@
 namespace Anvil {
 
 struct ExprResult {
-  enum class Kind { Constant, Register, Jmp /* Local, Global, ... */ };
+  enum class Kind { Constant, Register, Jmp, Local /* Global, ... */ };
   Kind kind;
   uint32_t idx; // k-index or register, depending on kind
 };
+
+static_assert(sizeof(ExprResult) <= 16);
 
 struct Local {
   StrPool::Index idx;
@@ -31,35 +34,42 @@ class Compiler {
   StrPool strings_;
   std::vector<Local> locals_;
   uint32_t depth_ = 0;
+  StringTable &str_table_;
 
   void CompileRoot();
-  uint32_t CompileExpressions(Node::ExtraRange range);
-  uint32_t CompileExpression(uint32_t stmt);
-  uint32_t CompileAssign(uint32_t stmt);
-  uint32_t CompileReturnSimple(uint32_t stmt);
-  uint32_t CompileIfSimple(uint32_t stmt);
-  uint32_t CompileIfFull(uint32_t stmt);
-  uint32_t CompileBlock(uint32_t stmt);
-  uint32_t CompileBinOp(Node::Kind kind, uint32_t expr);
-  uint32_t EmitLoadK(Object::Value v);
-  uint32_t CompileIntLiteral(uint32_t lit);
-  uint32_t CompileFltLiteral(uint32_t lit);
-  uint32_t CompileStringLiteral(uint32_t stmt);
-  uint32_t CompileIdent(uint32_t ident);
-  uint32_t CompileTrue(uint32_t stmt);
-  uint32_t CompileFalse(uint32_t stmt);
+  ExprResult CompileExpressions(Node::ExtraRange range);
+  ExprResult CompileExpression(uint32_t stmt);
+  ExprResult CompileBuiltinCall(uint32_t node);
+  ExprResult CompileAssign(uint32_t stmt);
+  ExprResult CompileReturnSimple(uint32_t stmt);
+  ExprResult CompileIfSimple(uint32_t stmt);
+  ExprResult CompileIfFull(uint32_t stmt);
+  ExprResult CompileBlock(uint32_t stmt);
+  ExprResult CompileBinOp(Node::Kind kind, uint32_t expr);
+  ExprResult CompileIdent(uint32_t ident);
+  ExprResult CompileIntLiteral(uint32_t lit);
+  ExprResult CompileFltLiteral(uint32_t lit);
+  ExprResult CompileStringLiteral(uint32_t stmt);
+  ExprResult CompileTrue(uint32_t stmt);
+  ExprResult CompileFalse(uint32_t stmt);
+  ExprResult EmitLoadK(Object::Value v);
   std::string_view SliceFromToken(Node::TokenIndex token);
   int64_t IntFromToken(Node::TokenIndex token);
   double FloatFromToken(Node::TokenIndex token);
+  std::optional<uint32_t> LookupNative(std::string_view name);
   uint32_t AllocateReg();
   void FreeReg(uint32_t keep);
+  void FreeExpr(ExprResult e);
+  uint32_t ExprToNextReg(ExprResult &e);
+  uint32_t ExprToAnyReg(ExprResult &e);
+  void DischargeToReg(ExprResult e, uint32_t reg);
   uint32_t EmitJump();
   void PatchJumpToHere(uint32_t jump_idx);
   void EnterScope();
   void ExitScope();
 
 public:
-  Compiler(std::string_view source, Ast ast);
+  Compiler(std::string_view source, Ast ast, StringTable &str_table);
   Block Compile();
 };
 

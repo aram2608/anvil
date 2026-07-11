@@ -1,12 +1,15 @@
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "strtable/strtable.hpp"
 #include "vm/object.hpp"
 #include "vm/vm.hpp"
 #include <gtest/gtest.h>
 #include <vector>
 
 using namespace Anvil;
+
+StringTable vm_table;
 
 Object::Value RunMockVM(const char *src) {
   Lexer l{src};
@@ -15,9 +18,9 @@ Object::Value RunMockVM(const char *src) {
 
   Parser p{src, tokens};
 
-  Compiler c{src, p.Parse()};
+  Compiler c{src, p.Parse(), vm_table};
 
-  VM vm{c.Compile()};
+  VM vm{c.Compile(), vm_table};
   return vm.MockRun();
 }
 

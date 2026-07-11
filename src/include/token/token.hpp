@@ -10,6 +10,10 @@ struct Token {
     Star,
     Equal,
     Bang,
+    Ampersand,
+    Caret,
+    Bar,
+    Tilde,
     ColonEqual,
     PlusEqual,
     MinusEqual,
@@ -39,6 +43,7 @@ struct Token {
     EndOfFile,
     Dot,
     Comma,
+    AtCall,
 
     // Control flow
     If,
@@ -46,6 +51,8 @@ struct Token {
     Else,
     While,
     Return,
+    Or,
+    And,
 
     FuncDecl,
 

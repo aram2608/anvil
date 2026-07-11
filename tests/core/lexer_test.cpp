@@ -39,6 +39,17 @@ TEST(Lexer, LexBinops) {
                          });
 }
 
+TEST(Lexer, LexBitwise) {
+  ExpectKinds("& ^ | ~", {
+
+                             Token::Kind::Ampersand,
+                             Token::Kind::Caret,
+                             Token::Kind::Bar,
+                             Token::Kind::Tilde,
+                             Token::Kind::EndOfFile,
+                         });
+}
+
 TEST(Lexer, LexAssignBinops) {
   ExpectKinds("+= -= *= /=", {
                                  Token::Kind::PlusEqual,

@@ -41,6 +41,7 @@ class Parser {
   Node::Index ParseExpression();
   Node::Index ParseExpressionPrecedence(const int min);
   Node::Index ParsePrefix();
+  Node::ExtraRange ParseParams();
   Node::Index ParseAtom();
   Node::TokenIndex Advance();
   Token::Kind Peek();

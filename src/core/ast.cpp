@@ -25,6 +25,15 @@ bool Ast::CheckErrors() const {
       case ParseError::Kind::MissingClosingBrace:
         std::cout << "Missing closing '}' at line " << line + 1 << "\n";
         break;
+      case Anvil::ParseError::Kind::ExpectedLeftParen:
+        std::cout << "Missing opening '(' at line " << line << "\n";
+        break;
+      case ParseError::Kind::ExpectedComma:
+        std::cout << "Expected ',' at line " << line << "\n";
+        break;
+      case ParseError::Kind::ExpectedCommaOrRightParen:
+        std::cout << "Missing ',' or ')' at line " << line << "\n";
+        break;
       }
     }
     return true;

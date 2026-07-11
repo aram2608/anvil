@@ -46,6 +46,8 @@ static constexpr auto kKeyWords =
         {"return", Token::Kind::Return},
         {"true", Token::Kind::TrueLiteral},
         {"false", Token::Kind::FalseLiteral},
+        {"or", Token::Kind::Or},
+        {"and", Token::Kind::And},
     })};
 
 } // namespace
@@ -159,9 +161,7 @@ void Anvil::DispatchLexGreater(Lexer &lex) {
 }
 
 void Anvil::DispatchLexDoubleQuote(Lexer &lex) {
-  while (!lex.IsEnd() && lex.Peek() != '"') {
-    lex.Advance();
-  }
+  while (!lex.IsEnd() && lex.Peek() != '"') lex.Advance();
 
   if (lex.IsEnd()) {
     lex.PushToken(Token::Kind::Error); // unterminated string
@@ -173,6 +173,21 @@ void Anvil::DispatchLexDoubleQuote(Lexer &lex) {
 }
 
 void Anvil::DispatchLexComma(Lexer &lex) { lex.PushToken(Token::Kind::Comma); }
+
+void Anvil::DispatchLexTilde(Lexer &lex) { lex.PushToken(Token::Kind::Tilde); }
+
+void Anvil::DispatchLexAmp(Lexer &lex) {
+  lex.PushToken(Token::Kind::Ampersand);
+}
+
+void Anvil::DispatchLexAt(Lexer &lex) {
+  while (!lex.IsEnd() && std::isalnum(lex.Peek())) lex.Advance();
+  lex.PushToken(Token::Kind::AtCall);
+}
+
+void Anvil::DispatchLexCaret(Lexer &lex) { lex.PushToken(Token::Kind::Caret); }
+
+void Anvil::DispatchLexBar(Lexer &lex) { lex.PushToken(Token::Kind::Bar); }
 
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
@@ -204,6 +219,11 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table['<'] = &DispatchLexLesser;
   table[','] = &DispatchLexComma;
   table['"'] = &DispatchLexDoubleQuote;
+  table['~'] = &DispatchLexTilde;
+  table['&'] = &DispatchLexAmp;
+  table['^'] = &DispatchLexCaret;
+  table['|'] = &DispatchLexBar;
+  table['@'] = &DispatchLexAt;
 
   for (unsigned char c = 'a'; c <= 'z'; ++c) {
     table[c] = &DispatchLexIdentifier;

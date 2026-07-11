@@ -3,6 +3,7 @@
 #include "dis/dis.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "strtable/strtable.hpp"
 #include "vm/vm.hpp"
 #include <cstdlib>
 #include <filesystem>
@@ -10,6 +11,8 @@
 #include <iostream>
 #include <iterator>
 #include <optional>
+
+StringTable global_strings;
 
 std::optional<std::string> ReadFile(std::filesystem::path path) {
   auto stream = std::ifstream(path);
@@ -31,10 +34,10 @@ int main(int argc, char **argv) {
       if (ast.CheckErrors()) {
         return 1;
       }
-      Anvil::Compiler c{source, ast};
+      Anvil::Compiler c{source, ast, global_strings};
       Anvil::Block b = c.Compile();
-      std::cout << Anvil::Dis::Disassemble(b);
-      Anvil::VM vm{b};
+      // std::cout << Anvil::Dis::Disassemble(b);
+      Anvil::VM vm{b, global_strings};
       vm.Run();
     } else {
       std::cout << argv[1] << " could not be opened\n";

@@ -5,29 +5,14 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <string_view>
 #include <type_traits>
 
-// TODO: Implementation level details are leaking into this file
-// consider leaving declarations here and writing a definition file
-// to not break the one def. rule
-
 namespace Object {
 
-inline uint32_t HashBytes(const char *c, size_t len,
-                          uint32_t hash = 2166136261U /* FNV offset basis */) {
-  // 32-bit FNV prime
-  const uint32_t fnv_prime = 16777619U;
-
-  for (size_t i = 0; i < len; i++) {
-    // XOR the bottom with the current byte
-    hash ^= static_cast<uint8_t>(c[i]);
-    // Multiply by the FNV prime
-    hash *= fnv_prime;
-  }
-
-  return hash;
-}
+uint32_t HashBytes(const char *c, size_t len,
+                   uint32_t hash = 2166136261U /* FNV offset basis */);
 
 enum class Kind : uint8_t {
   Void = 0,
@@ -40,6 +25,7 @@ enum class Kind : uint8_t {
 struct Void {};
 
 struct String {
+  String *next;
   uint32_t len;
   uint32_t hash;
 
@@ -50,25 +36,14 @@ struct String {
 
   std::string_view view() const { return {data(), len}; }
 
-  static String *Create(std::string_view sv) {
-    // Allocate a big chunk of data for the header and the string
-    void *block = std::malloc(sizeof(String) + sv.size());
-    // cram the entire thing into the block in order
-    // the bytes should be ordered as the following
-    // header
-    // data*
-    String *s = new (block) String{static_cast<uint32_t>(sv.size()),
-                                   HashBytes(sv.data(), sv.size())};
-    std::memcpy(reinterpret_cast<char *>(block) + sizeof(String), sv.data(),
-                sv.size());
-    return s;
-  }
+  static String *Create(std::string_view sv, uint32_t hash);
+  static String *Create(std::string_view a, std::string_view b, uint32_t hash);
 };
 
 // Need to keep track of padding
 // if this changes the book keeping above needs to change a bit
 // garbage collection may require a new field so adjust accordingly then
-static_assert(sizeof(String) == 8);
+static_assert(sizeof(String) == 16);
 
 struct Value {
   union {
@@ -92,6 +67,21 @@ static_assert(std::is_trivially_copyable_v<Value>);
 
 inline bool checkType(const Value &v, Kind k) { return v.kind == k; }
 
+inline std::string ToRepr(const Value &v) {
+  switch (v.kind) {
+  case Kind::Void:
+    return "void";
+  case Kind::Int:
+    return std::to_string(v.asInt());
+  case Kind::Float:
+    return std::to_string(v.asFloat());
+  case Kind::Bool:
+    return v.asBool() ? "true" : "false";
+  case Kind::String:
+    return v.asString()->data();
+  }
+}
+
 inline Value mkInt(int64_t x) {
   return Value{.as = {.i = x}, .kind = Kind::Int};
 }
@@ -104,27 +94,12 @@ inline Value mkBool(bool x) {
   return Value{.as = {.b = x}, .kind = Kind::Bool};
 }
 
-inline Value mkString(std::string_view sv) {
-  return Value{.as = {.s = String::Create(sv)}, .kind = Kind::String};
+inline Value mkString(String *s) {
+  return Value{.as = {.s = s}, .kind = Kind::String};
 }
 
 inline Value mkVoid(Void x) {
   return Value{.as = {.v = x}, .kind = Kind::Void};
-}
-
-inline std::string_view asView(String *s) { return s->view(); }
-
-inline Value ConcatString(String *a, String *b) {
-  uint32_t len = a->len + b->len;
-
-  void *block = std::malloc(sizeof(String) + len);
-
-  String *s = new (block) String{len, HashBytes(b->data(), b->len, a->hash)};
-  char *dst = reinterpret_cast<char *>(block) + sizeof(String);
-  std::memcpy(dst, a->data(), a->len);
-  std::memcpy(dst + a->len, b->data(), a->len);
-
-  return Value{.as = {.s = s}, .kind = Kind::String};
 }
 
 inline bool isBool(const Value &v) { return v.kind == Kind::Bool; }
@@ -132,6 +107,7 @@ inline bool isInt(const Value &v) { return v.kind == Kind::Int; }
 inline bool isFloat(const Value &v) { return v.kind == Kind::Float; }
 inline bool isVoid(const Value &v) { return v.kind == Kind::Void; }
 inline bool isString(const Value &v) { return v.kind == Kind::String; }
+inline bool isNumeric(const Value &v) { return isFloat(v) || isInt(v); }
 
 // TODO: Find a better solution for this
 // This should ideally only handle numeric types, perhaps we throw an error at

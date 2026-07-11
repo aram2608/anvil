@@ -3,10 +3,13 @@
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "strtable/strtable.hpp"
 #include <gtest/gtest.h>
 #include <vector>
 
 using namespace Anvil;
+
+StringTable compile_table;
 
 Block RunCompiler(const char *src) {
   Lexer l{src};
@@ -15,7 +18,7 @@ Block RunCompiler(const char *src) {
 
   Parser p{src, tokens};
 
-  Compiler c{src, p.Parse()};
+  Compiler c{src, p.Parse(), compile_table};
 
   return c.Compile();
 }
@@ -28,6 +31,6 @@ TEST(Compiler, CompileBinOps) {
 
   Code::Inst ret = b.get_code()[b.OpcodesSize() - 1];
   ASSERT_EQ(Code::GetOp(ret), Code::Op::Ret);
-  ASSERT_EQ(Code::GetA(ret), 2); // Add's result register
+  ASSERT_EQ(Code::GetA(ret), 0);
   ASSERT_EQ(Code::GetB(ret), 2); // nresults + 1
 }

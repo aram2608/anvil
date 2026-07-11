@@ -24,18 +24,43 @@ constexpr auto MakePrecedenceTable() {
     table[static_cast<size_t>(token)] = data;
   };
 
+  // Binding and reassignment
   set(Token::Kind::Equal, {10, 9, Node::Kind::Reassign});
   set(Token::Kind::ColonEqual, {11, 10, Node::Kind::Assign});
+
+  // Logical control flow
+  // TODO: Ponder this more, should this behave like Lua/Python or return
+  // boolean?
+  // if (x and y) do something
+  // or
+  // name := lookup() or "default";
+  // both have their pros and cons
+  // && and || can be added too honestly
+  // that would allow for both options
+  // if (x && y) do something
+  // if (x && y) and if (y || z) do something maybe?
+  set(Token::Kind::Or, {20, 21, Node::Kind::LogicalOr});
+  set(Token::Kind::And, {30, 31, Node::Kind::LogicalAnd});
+
+  // Comps
   set(Token::Kind::EqualEqual, {40, 41, Node::Kind::Equal});
   set(Token::Kind::BangEqual, {40, 41, Node::Kind::NotEqual});
   set(Token::Kind::Lesser, {50, 51, Node::Kind::LesserThan});
   set(Token::Kind::Greater, {50, 51, Node::Kind::GreaterThan});
   set(Token::Kind::LesserEqual, {50, 51, Node::Kind::LesserEqual});
   set(Token::Kind::GreaterEqual, {50, 51, Node::Kind::GreaterEqual});
-  set(Token::Kind::Plus, {60, 61, Node::Kind::Add});
-  set(Token::Kind::Minus, {60, 61, Node::Kind::Sub});
-  set(Token::Kind::Star, {70, 71, Node::Kind::Mult});
-  set(Token::Kind::Slash, {70, 71, Node::Kind::Div});
+
+  // Bitwise
+  set(Token::Kind::Ampersand, {60, 61, Node::Kind::BitAnd});
+  set(Token::Kind::Bar, {60, 61, Node::Kind::BitOr});
+  set(Token::Kind::Tilde, {60, 61, Node::Kind::BitNot});
+  set(Token::Kind::Caret, {60, 61, Node::Kind::BitXor});
+
+  // Arith
+  set(Token::Kind::Plus, {70, 71, Node::Kind::Add});
+  set(Token::Kind::Minus, {70, 71, Node::Kind::Sub});
+  set(Token::Kind::Star, {80, 81, Node::Kind::Mult});
+  set(Token::Kind::Slash, {80, 81, Node::Kind::Div});
 
   return table;
 }
@@ -228,8 +253,49 @@ Node::Index Parser::ParsePrefix() {
   }
 }
 
+Node::ExtraRange Parser::ParseParams() {
+  if (EatToken(Token::Kind::LeftParen) == Node::TokenIndex::None) {
+    errors_.push_back({
+        .kind = ParseError::Kind::ExpectedLeftParen,
+        .token = Advance(),
+    });
+    Synchronize(); // this might not work
+    return Node::ExtraRange{.start = 0, .end = 0};
+  }
+
+  const auto top = scratch_.size();
+  bool parse_params = true;
+  while (parse_params) {
+    if (EatToken(Token::Kind::RightParen) != Node::TokenIndex::None) break;
+    scratch_.push_back(ParseExpression());
+    switch (TokenKind(current_)) {
+    case Token::Kind::Comma:
+      Advance();
+      break;
+    case Token::Kind::RightParen:
+      Advance();
+      parse_params = false; // finished parsing call
+      break;
+    default:
+      errors_.push_back({
+          .kind = ParseError::Kind::ExpectedCommaOrRightParen,
+          .token = Previous(),
+      });
+      break;
+    }
+  }
+
+  return CommitScratch(top);
+}
+
 Node::Index Parser::ParseAtom() {
   switch (TokenKind(current_)) {
+  case Token::Kind::AtCall:
+    return AddNode({
+        .kind = Node::Kind::BuiltinCall,
+        .main_token = Advance(),
+        .data = ParseParams(),
+    });
   case Token::Kind::IntLiteral:
     return AddNode({
         .kind = Node::Kind::Int,

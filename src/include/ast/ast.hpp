@@ -10,7 +10,14 @@
 namespace Anvil {
 
 struct ParseError {
-  enum class Kind { UnexpectedToken, MissingSemicolon, MissingClosingBrace };
+  enum class Kind {
+    UnexpectedToken,
+    MissingSemicolon,
+    MissingClosingBrace,
+    ExpectedLeftParen,
+    ExpectedComma,
+    ExpectedCommaOrRightParen
+  };
 
   Kind kind;
   Node::TokenIndex token;
@@ -29,6 +36,10 @@ public:
 
   const TokenBuffer &Tokens() const { return tokens_; }
   const NodeBuffer &Nodes() const { return nodes_; }
+  // Surely theres a smarter way to do this
+  std::span<const uint32_t> Children(Node::ExtraRange r) const {
+    return std::span{extra_data_}.subspan(r.start, r.end - r.start);
+  }
   bool CheckErrors() const;
   std::span<const uint32_t> ExtraData() const { return extra_data_; }
   std::span<const ParseError> Errors() const { return errors_; }

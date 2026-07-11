@@ -2,7 +2,9 @@
 #include "ast/node.hpp"
 #include "compiler/bytecode.hpp"
 #include "strpool/strpool.hpp"
+#include "strtable/strtable.hpp"
 #include "utils/die.hpp"
+#include "vm/builtins.hpp"
 #include "vm/object.hpp"
 #include <cassert>
 #include <cerrno>
@@ -10,17 +12,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <iterator>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
 
-// TODO: Find a way to intern constants
-// ideally we can store the object's register index so it can be reused
-
 using namespace Anvil;
 
-Compiler::Compiler(std::string_view source, Ast ast)
-    : source_{source}, ast_{ast} {}
+Compiler::Compiler(std::string_view source, Ast ast, StringTable &str_table)
+    : source_{source}, ast_{ast}, str_table_{str_table} {}
 
 Block Compiler::Compile() {
   CompileRoot();
@@ -30,30 +31,28 @@ Block Compiler::Compile() {
 void Compiler::CompileRoot() {
   auto root = ast_.Nodes().Datas()[0];
   auto range = std::get<Node::ExtraRange>(root);
-  uint32_t v = CompileExpressions(range);
-  // Lua convention: B = nresults + 1, so B=2 returns the one value in R[A]
-  // B = 0 -> dynamic result
-  // B = 1 -> returns 0 values
-  // B = 2 -> returns one value, in R[A]
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v, 2, 0));
+  ExprResult v = CompileExpressions(range);
+  block_.PushInstruction(
+      Code::CreateABCk(Code::Op::Ret, ExprToAnyReg(v), 2, 0));
 }
 
-uint32_t Compiler::CompileExpressions(Node::ExtraRange range) {
-  auto children =
-      ast_.ExtraData().subspan(range.start, range.end - range.start);
+ExprResult Compiler::CompileExpressions(Node::ExtraRange range) {
+  auto children = ast_.Children(range);
 
   if (children.empty()) {
     return EmitLoadK(Object::mkVoid({}));
   }
 
   for (size_t i = 0; i < children.size() - 1; i++) {
-    CompileExpression(children[i]);
+    FreeExpr(CompileExpression(children[i]));
+    // make sure the register shrinks with the locals
+    assert(next_reg_ == locals_.size());
   }
 
   return CompileExpression(children[children.size() - 1]);
 }
 
-uint32_t Compiler::CompileExpression(uint32_t stmt) {
+ExprResult Compiler::CompileExpression(uint32_t stmt) {
   Node::Kind kind = ast_.Nodes().Kinds()[stmt];
 
   switch (kind) {
@@ -88,21 +87,59 @@ uint32_t Compiler::CompileExpression(uint32_t stmt) {
     return CompileIfSimple(stmt);
   case Node::Kind::Block:
     return CompileBlock(stmt);
+  case Node::Kind::BuiltinCall:
+    return CompileBuiltinCall(stmt);
   case Node::Kind::ReturnSimple:
     return CompileReturnSimple(stmt);
   default:
-    DieLoudly{"Unreachable at CompileExpression"}();
+    DieLoudly("Unreachable at CompileExpression");
   }
 }
 
-uint32_t Compiler::CompileAssign(uint32_t stmt) {
+ExprResult Compiler::CompileBuiltinCall(uint32_t call) {
+  Node::Data data = ast_.Nodes().Datas()[call];
+  Node::TokenIndex main_token = ast_.Nodes().MainTokens()[call];
+  std::string_view name = SliceFromToken(main_token);
+  Node::ExtraRange arg_range = std::get<Node::ExtraRange>(data);
+  uint32_t argc = arg_range.end - arg_range.start;
+  // We assume that the max u32 value will never be a valid
+  // index into the builtins
+  // that is 4,294,967,295 total functions
+  uint32_t idx = LookupNative(name.substr(1, name.size())).value_or(~0);
+  if (idx == 0xFFFFFFFF) {
+    DieLoudly("Builtin function not found");
+  }
+
+  uint32_t base = next_reg_; // args start here
+  for (size_t i = arg_range.start; i < arg_range.end; i++) {
+    ExprResult arg = CompileExpression(ast_.ExtraData()[i]);
+    ExprToNextReg(arg);
+  }
+
+  // TODO: Consider adding a Sema pass or something to try and catch problems
+  // there instead of compile time
+  // with a sema we can start making the language more strongly typed
+  // and that opens up using pointers and stuff which could be pretty neat
+  // in a scripting language
+  Arity arity = kNatives[idx].arity;
+  if (arity != Arity::Variadic && ToU32(arity) != argc) {
+    DieLoudly("Mismatched arity at call site");
+  }
+
+  // CallB base, argc, idx
+  block_.PushInstruction(Code::CreateABCk(Code::Op::CallB, base, argc, idx));
+  FreeReg(base + 1);
+  return ExprResult{ExprResult::Kind::Register, base};
+}
+
+ExprResult Compiler::CompileAssign(uint32_t stmt) {
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::NodeAndNode assign = std::get<Node::NodeAndNode>(data);
   uint32_t ident_idx = ToU32(assign.first);
 
   if (ast_.Nodes().Kinds()[ident_idx] != Node::Kind::Ident) {
     // TODO: Push an error here later, for now just yell then die
-    DieLoudly{"TODO: Add error handling at compile time"}();
+    DieLoudly("TODO: Add error handling at compile time");
   }
 
   Node::TokenIndex ident_tok = ast_.Nodes().MainTokens()[ident_idx];
@@ -110,25 +147,18 @@ uint32_t Compiler::CompileAssign(uint32_t stmt) {
 
   for (int i = static_cast<int>(locals_.size()) - 1; i >= 0; --i) {
     if (locals_[i].idx == string_idx) {
-      DieLoudly{"Cannot rebind variable, use `=` to mutate"}();
+      DieLoudly("Cannot rebind variable, use `=` to mutate");
     }
   }
 
-  uint32_t target_reg = next_reg_;
-  uint32_t reg_rhs = CompileExpression(ToU32(assign.second));
-
-  if (reg_rhs != target_reg) {
-    block_.PushInstruction(
-        Code::CreateABCk(Code::Op::Move, target_reg, reg_rhs, 0));
-  }
-
-  FreeReg(target_reg + 1);
+  ExprResult rhs = CompileExpression(ToU32(assign.second));
+  uint32_t slot = ExprToNextReg(rhs);
+  assert(slot == locals_.size());
   locals_.push_back({.idx = string_idx, .depth = depth_});
-
-  return target_reg;
+  return {ExprResult::Kind::Local, slot};
 }
 
-uint32_t Compiler::CompileIfFull(uint32_t stmt) {
+ExprResult Compiler::CompileIfFull(uint32_t stmt) {
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::NodeAndExtra if_node = std::get<Node::NodeAndExtra>(data);
 
@@ -138,80 +168,77 @@ uint32_t Compiler::CompileIfFull(uint32_t stmt) {
 
   uint32_t base = next_reg_;
 
-  uint32_t reg_cond = CompileExpression(ToU32(if_node.node));
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, reg_cond, 0, 0, 0));
+  ExprResult cond = CompileExpression(ToU32(if_node.node));
+  uint32_t rc = ExprToAnyReg(cond);
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, rc, 0, 0, 0));
   uint32_t jmp_to_else = EmitJump();
 
   // Only one jump is possible so the branches can share registers
   // The Inst needs to Move to the same location for both (ie the base) so the
   // VM knows where the if-expression's value lives
   FreeReg(base);
-  uint32_t reg_then = CompileExpression(then_expr);
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_then, 0));
+  DischargeToReg(CompileExpression(then_expr), base);
   uint32_t jmp_to_end = EmitJump();
   PatchJumpToHere(jmp_to_else);
 
   // See comment above ^
   FreeReg(base);
-  uint32_t reg_else = CompileExpression(else_expr);
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_else, 0));
+  DischargeToReg(CompileExpression(else_expr), base);
   PatchJumpToHere(jmp_to_end);
 
   FreeReg(base + 1);
-  return base;
+  return ExprResult{ExprResult::Kind::Register, base};
 }
 
-uint32_t Compiler::CompileIfSimple(uint32_t stmt) {
+ExprResult Compiler::CompileIfSimple(uint32_t stmt) {
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::NodeAndNode if_node = std::get<Node::NodeAndNode>(data);
 
   uint32_t base = next_reg_;
 
-  uint32_t reg_cond = CompileExpression(ToU32(if_node.first));
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, reg_cond, 0, 0, 0));
+  ExprResult cond = CompileExpression(ToU32(if_node.first));
+  uint32_t rc = ExprToAnyReg(cond);
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, rc, 0, 0, 0));
   uint32_t jmp_to_else = EmitJump();
 
   FreeReg(base);
-  uint32_t reg_then = CompileExpression(ToU32(if_node.second));
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, reg_then, 0));
+  DischargeToReg(CompileExpression(ToU32(if_node.second)), base);
   uint32_t jmp_to_end = EmitJump();
   PatchJumpToHere(jmp_to_else);
 
   // The else branch needs a synthetic `Void` branch
   FreeReg(base);
-  EmitLoadK(Object::mkVoid({}));
+  DischargeToReg(EmitLoadK(Object::mkVoid({})), base);
   PatchJumpToHere(jmp_to_end);
 
   FreeReg(base + 1);
-  return base;
+  return ExprResult{ExprResult::Kind::Register, base};
 }
 
-uint32_t Compiler::CompileReturnSimple(uint32_t stmt) {
+ExprResult Compiler::CompileReturnSimple(uint32_t stmt) {
   Node::Data ret = ast_.Nodes().Datas()[stmt];
   Node::Index expr = std::get<Node::Index>(ret);
-  uint32_t v = CompileExpression(ToU32(expr));
+  ExprResult v = CompileExpression(ToU32(expr));
   // Lua convention: B = nresults + 1, so B=2 returns the one value in R[A]
   // B = 0 -> dynamic result
   // B = 1 -> returns 0 values
   // B = 2 -> returns one value, in R[A]
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v, 2, 0));
-  return v;
+  block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v.idx, 2, 0));
+  return ExprResult{ExprResult::Kind::Register, v.idx};
 }
 
-uint32_t Compiler::CompileBlock(uint32_t stmt) {
+ExprResult Compiler::CompileBlock(uint32_t stmt) {
   // Blocks are expressions so the last value needs to leave it's
   // value on the stack
   uint32_t base = next_reg_;
   EnterScope();
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::ExtraRange range = std::get<Node::ExtraRange>(data);
-  uint32_t result = CompileExpressions(range);
-  if (result != base) {
-    block_.PushInstruction(Code::CreateABCk(Code::Op::Move, base, result, 0));
-  }
+  ExprResult result = CompileExpressions(range);
+  DischargeToReg(result, base);
   ExitScope();
   next_reg_ = base + 1; // the next register is after this blocks value
-  return base;
+  return ExprResult{ExprResult::Kind::Register, base};
 }
 
 // clang-format off
@@ -227,80 +254,85 @@ constexpr Code::Op MapNodeToOp(Node::Kind kind) {
   case Node::Kind::GreaterThan:     return Code::Op::Gt;
   case Node::Kind::Equal:           return Code::Op::Eq;
   case Node::Kind::NotEqual:        return Code::Op::Ne;
+  case Node::Kind::BitAnd:          return Code::Op::BAnd;
+  case Node::Kind::BitNot:          return Code::Op::BNot;
+  case Node::Kind::BitOr:           return Code::Op::BOr;
+  case Node::Kind::BitXor:          return Code::Op::BXor;
   default:
-    DieLoudly{"Unreachable at CompileBinOp Mapping"}();
+    DieLoudly("Unreachable at CompileBinOp Mapping");
   }
 }
 // clang-format on
 
-uint32_t Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
+ExprResult Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
   Node::Data data = ast_.Nodes().Datas()[expr];
   Node::NodeAndNode bin_op = std::get<Node::NodeAndNode>(data);
-  uint32_t reg_left = CompileExpression(ToU32(bin_op.first));
-  uint32_t reg_right = CompileExpression(ToU32(bin_op.second));
+  ExprResult left = CompileExpression(ToU32(bin_op.first));
+  uint32_t rl = ExprToAnyReg(left);
+  ExprResult right = CompileExpression(ToU32(bin_op.second));
+  uint32_t rr = ExprToAnyReg(right);
 
-  uint32_t reg_result = AllocateReg();
+  FreeExpr(right); // top temp first
+  FreeExpr(left);
+  uint32_t dst = AllocateReg();
 
-  Code::Inst inst =
-      Code::CreateABCk(MapNodeToOp(kind), reg_result, reg_left, reg_right);
+  Code::Inst inst = Code::CreateABCk(MapNodeToOp(kind), dst, rl, rr);
   block_.PushInstruction(inst);
 
-  return reg_result;
+  return ExprResult{ExprResult::Kind::Register, dst};
 }
 
-uint32_t Compiler::CompileIdent(uint32_t stmt) {
+ExprResult Compiler::CompileIdent(uint32_t stmt) {
   Node::TokenIndex tok = ast_.Nodes().MainTokens()[stmt];
   std::optional<StrPool::Index> string_idx = strings_.Get(SliceFromToken(tok));
 
-  if (!string_idx.has_value()) DieLoudly{"Undefined variable"}();
+  if (!string_idx.has_value()) DieLoudly("Undefined variable");
 
   for (int i = static_cast<int>(locals_.size()) - 1; i >= 0; --i) {
     if (locals_[i].idx == string_idx.value()) {
-      return static_cast<uint32_t>(i); // locals_[i] lives in register i
+      // locals_[i] lives in register i
+      return ExprResult{ExprResult::Kind::Local, static_cast<uint32_t>(i)};
     }
   }
-  DieLoudly{"Undefined variable"}(); // TODO: real error reporting
+  DieLoudly("Undefined variable"); // TODO: real error reporting
 }
 
-uint32_t Compiler::CompileFltLiteral(uint32_t lit) {
+ExprResult Compiler::CompileFltLiteral(uint32_t lit) {
   Node::Data data = ast_.Nodes().Datas()[lit];
   auto token = ast_.Nodes().MainTokens()[lit];
   return EmitLoadK(Object::mkFloat(FloatFromToken(token)));
 }
 
-uint32_t Compiler::CompileIntLiteral(uint32_t lit) {
+ExprResult Compiler::CompileIntLiteral(uint32_t lit) {
   Node::Data data = ast_.Nodes().Datas()[lit];
   auto token = ast_.Nodes().MainTokens()[lit];
   return EmitLoadK(Object::mkInt(IntFromToken(token)));
 }
 
-uint32_t Compiler::CompileStringLiteral(uint32_t lit) {
+ExprResult Compiler::CompileStringLiteral(uint32_t lit) {
   Node::Data data = ast_.Nodes().Datas()[lit];
   auto token = ast_.Nodes().MainTokens()[lit];
   auto start = ast_.Tokens().Starts()[ToU32(token)];
   auto len = ast_.Tokens().Lens()[ToU32(token)];
   // the quotes need stripped
-  return EmitLoadK(Object::mkString(source_.substr(start + 1, len - 2)));
+  std::string_view slice = source_.substr(start + 1, len - 2);
+  return EmitLoadK(Object::mkString(str_table_.Intern(slice)));
 }
 
-uint32_t Compiler::CompileTrue(uint32_t stmt) {
+ExprResult Compiler::CompileTrue(uint32_t stmt) {
   return EmitLoadK(Object::mkBool(true));
 }
 
-uint32_t Compiler::CompileFalse(uint32_t stmt) {
+ExprResult Compiler::CompileFalse(uint32_t stmt) {
   return EmitLoadK(Object::mkBool(false));
 }
 
-uint32_t Compiler::EmitLoadK(Object::Value v) {
+ExprResult Compiler::EmitLoadK(Object::Value v) {
   block_.PushConstant(v);
 
   uint32_t const_index = block_.ConstantsSize() - 1;
-  uint32_t target_reg = AllocateReg();
 
-  Code::Inst inst = Code::CreateABx(Code::Op::LoadK, target_reg, const_index);
-  block_.PushInstruction(inst);
-
-  return target_reg;
+  return ExprResult{ExprResult::Kind::Constant, const_index};
 }
 
 std::string_view Compiler::SliceFromToken(Node::TokenIndex token) {
@@ -312,6 +344,48 @@ std::string_view Compiler::SliceFromToken(Node::TokenIndex token) {
 uint32_t Compiler::AllocateReg() { return next_reg_++; }
 
 void Compiler::FreeReg(uint32_t keep) { next_reg_ = keep; }
+
+void Compiler::FreeExpr(ExprResult e) {
+  if (e.kind == ExprResult::Kind::Register && e.idx >= locals_.size()) {
+    assert(e.idx == next_reg_ - 1);
+    next_reg_--;
+  }
+}
+
+void Compiler::DischargeToReg(ExprResult e, uint32_t reg) {
+  switch (e.kind) {
+  // If a register does not match the expression ident
+  // it needs to be moved to the correct one
+  case ExprResult::Kind::Local:
+  case ExprResult::Kind::Register:
+    if (e.idx != reg)
+      block_.PushInstruction(Code::CreateABCk(Code::Op::Move, reg, e.idx, 0));
+    break;
+  // constants get pushed irregardles
+  case ExprResult::Kind::Constant:
+    block_.PushInstruction(Code::CreateABx(Code::Op::LoadK, reg, e.idx));
+    break;
+  // Jmps need to be patched
+  case ExprResult::Kind::Jmp:
+    DieLoudly("unimplemented");
+  }
+}
+
+// Results need to be modifed in order to follow the same Lua
+// semantics
+uint32_t Compiler::ExprToNextReg(ExprResult &e) {
+  FreeExpr(e);
+  uint32_t reg = AllocateReg(); // new tmp register at the top
+  DischargeToReg(e, reg);
+  e = {ExprResult::Kind::Register, reg};
+  return reg;
+}
+
+uint32_t Compiler::ExprToAnyReg(ExprResult &e) {
+  if (e.kind == ExprResult::Kind::Local || e.kind == ExprResult::Kind::Register)
+    return e.idx;
+  return ExprToNextReg(e);
+}
 
 uint32_t Compiler::EmitJump() {
   block_.PushInstruction(Code::CreatesJ(Code::Op::Jmp, 0));
@@ -343,15 +417,15 @@ int64_t Compiler::IntFromToken(Node::TokenIndex token) {
   // TODO: Better error handling
   // once compiler errors are reported replace these
   if (ec == std::errc::invalid_argument) { // this one should be impossible
-    DieLoudly{"Error: Not a valid number."}();
+    DieLoudly("Error: Not a valid number.");
   }
 
   if (ec == std::errc::result_out_of_range) { // this one can happen
-    DieLoudly{"Error: Number is too large for the type."}();
+    DieLoudly("Error: Number is too large for the type.");
   }
 
   if (ptr != slice.data() + slice.size()) { // also should also be impossible
-    DieLoudly{"Error: Trailing characters found in parsed string"}();
+    DieLoudly("Error: Trailing characters found in parsed string");
   }
 
   return value;
@@ -374,8 +448,18 @@ double Compiler::FloatFromToken(Node::TokenIndex token) {
   // TODO: Better error handling
   // once compiler errors are reported replace this
   if (errno == ERANGE) {
-    DieLoudly{"The value was too large or too small for a double."}();
+    DieLoudly("The value was too large or too small for a double.");
   }
 
   return value;
+}
+
+std::optional<uint32_t> Compiler::LookupNative(std::string_view name) {
+  // O(N) lookup per number of builtins
+  // maybe a different data structure could be used here when the number
+  // grows
+  for (size_t i = 0; i < std::size(kNatives); i++) {
+    if (name == kNatives[i].name) return i;
+  }
+  return std::nullopt;
 }

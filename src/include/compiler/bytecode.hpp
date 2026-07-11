@@ -131,6 +131,11 @@ inline constexpr OpMetadata kOpInfo[] = {
     /* Op::GE    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
     /* Op::EQ    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
     /* Op::NE    */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::BAnd  */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::BOr   */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::BXor  */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::BNot  */ OpMetadata::Create(Mode::iABC,  true,  false, true,  true,  true ),
+    /* Op::CallB */ OpMetadata::Create(Mode::iABC,  true,  false, false, false, true),
 };
 // clang-format on
 

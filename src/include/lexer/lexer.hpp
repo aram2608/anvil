@@ -58,6 +58,11 @@ public:
   friend void DispatchLexLesser(Lexer &lex);
   friend void DispatchLexComma(Lexer &lex);
   friend void DispatchLexDoubleQuote(Lexer &lex);
+  friend void DispatchLexTilde(Lexer &lex);
+  friend void DispatchLexAmp(Lexer &lex);
+  friend void DispatchLexCaret(Lexer &lex);
+  friend void DispatchLexBar(Lexer &lex);
+  friend void DispatchLexAt(Lexer &lex);
 };
 
 } // namespace Anvil

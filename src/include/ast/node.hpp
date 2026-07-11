@@ -72,6 +72,7 @@ struct Node {
     False,
     Reassign,
     Assign,
+    BuiltinCall,
     Equal,
     NotEqual,
     LesserThan,
@@ -80,6 +81,12 @@ struct Node {
     GreaterEqual,
     BoolNot,
     Negate,
+    LogicalAnd,
+    LogicalOr,
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitNot,
     Undefined,
   };
 
