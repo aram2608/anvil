@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <variant>
 
 using namespace Anvil;
@@ -95,7 +96,7 @@ void Parser::ParseRoot() {
   nodes_[ToU32(root)].data = CommitScratch(scratch_top);
 }
 
-// stmts <- (SEMICOLON | block | expr)* EOF
+// stmts <- (SEMICOLON | block | if_expr | expr_stmt)* EOF
 Node::Index Parser::ParseStatements() {
   switch (TokenKind(current_)) {
   case Token::Kind::LeftBrace:
@@ -249,8 +250,33 @@ Node::Index Parser::ParsePrefix() {
         .data = Node::Index{ParsePrefix()},
     });
   default:
-    return ParseAtom();
+    return ParsePostfix();
   }
+}
+
+// postfix <- (CALL, "DOT")* atom
+Node::Index Parser::ParsePostfix() {
+  Node::Index expr = ParseAtom();
+  if (TokenKind(current_) == Token::Kind::LeftParen) {
+    // calls can be chained
+    while (TokenKind(current_) == Token::Kind::LeftParen) {
+      Node::TokenIndex lparen{current_};
+      Node::ExtraRange args = ParseParams();
+      expr = AddNode({
+          .kind = Node::Kind::Call,
+          .main_token = lparen,
+          .data =
+              Node::NodeAndExtra{
+                  expr,
+                  AddExtra(Node::CallExtra{args}),
+              },
+      });
+    }
+  } else if (TokenKind(current_) == Token::Kind::Dot) {
+    assert(0 && "TODO: Implement member access");
+  }
+
+  return expr;
 }
 
 Node::ExtraRange Parser::ParseParams() {
@@ -288,8 +314,55 @@ Node::ExtraRange Parser::ParseParams() {
   return CommitScratch(top);
 }
 
+Node::Index Parser::ParseProto() {
+  Node::TokenIndex fn = EatToken(Token::Kind::FuncLiteral);
+  if (EatToken(Token::Kind::LeftParen) == Node::TokenIndex::None) {
+    errors_.push_back({
+        .kind = ParseError::Kind::ExpectedLeftParen,
+        .token = Advance(),
+    });
+    return Node::Index{0};
+  }
+
+  const auto top = scratch_.size();
+  bool parse_params = true;
+  while (parse_params) {
+    if (EatToken(Token::Kind::RightParen) != Node::TokenIndex::None) break;
+    scratch_.push_back(ParseExpression());
+    switch (TokenKind(current_)) {
+    case Token::Kind::Comma:
+      Advance();
+      break;
+    case Token::Kind::RightParen:
+      Advance();
+      parse_params = false; // finished parsing params
+      break;
+    default:
+      errors_.push_back({
+          .kind = ParseError::Kind::ExpectedCommaOrRightParen,
+          .token = Previous(),
+      });
+      Advance(); // try to keep parsing anyways
+      break;
+    }
+  }
+
+  Node::ExtraRange params = CommitScratch(top);
+  Node::Index body = ParseBlock();
+  return AddNode({
+      .kind = Node::Kind::FuncProto,
+      .main_token = fn,
+      .data = AddExtra(Node::ProtoExtra{
+          .params = params,
+          .block = body,
+      }),
+  });
+}
+
 Node::Index Parser::ParseAtom() {
   switch (TokenKind(current_)) {
+  case Token::Kind::FuncLiteral:
+    return ParseProto();
   case Token::Kind::AtCall:
     return AddNode({
         .kind = Node::Kind::BuiltinCall,
@@ -372,7 +445,10 @@ Token::Kind Parser::Peek() {
   return tokens_.Kinds()[current_];
 }
 
-Node::TokenIndex Parser::Previous() { return Node::TokenIndex{current_ - 1}; }
+Node::TokenIndex Parser::Previous() {
+  assert(current_ - 1 >= 0);
+  return Node::TokenIndex{current_ - 1};
+}
 
 Node::Index Parser::AddNode(Node node) {
   nodes_.push_back(node);
@@ -413,6 +489,27 @@ Node::ExtraIndex Parser::AddExtra(Node::IfExtra extra) {
   // Serialized sequentially
   PushExtraValue(extra.then_expr);
   PushExtraValue(extra.else_expr);
+
+  return Node::ExtraIndex{result};
+}
+
+Node::ExtraIndex Parser::AddExtra(Node::ProtoExtra extra) {
+  uint32_t result = static_cast<uint32_t>(extra_data_.size());
+
+  // Serialize the params first
+  PushExtraValue(extra.params.start);
+  PushExtraValue(extra.params.end);
+  PushExtraValue(extra.block);
+
+  return Node::ExtraIndex{result};
+}
+
+Node::ExtraIndex Parser::AddExtra(Node::CallExtra extra) {
+  uint32_t result = static_cast<uint32_t>(extra_data_.size());
+
+  // Serialized start then end
+  PushExtraValue(extra.argc.start);
+  PushExtraValue(extra.argc.end);
 
   return Node::ExtraIndex{result};
 }

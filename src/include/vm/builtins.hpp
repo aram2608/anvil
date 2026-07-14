@@ -28,25 +28,9 @@ struct Builtin {
 // but we can deal with that once objects are a thing
 inline Object::Value BuiltinPrintf(std::span<Object::Value> args) {
   for (const auto a : args) {
-    switch (a.kind) {
-    case Object::Kind::Void:
-      std::cout << "void";
-      break;
-    case Object::Kind::Int:
-      std::cout << a.asInt();
-      break;
-    case Object::Kind::Float:
-      std::cout << a.asFloat();
-      break;
-    case Object::Kind::Bool:
-      std::cout << std::boolalpha << a.asBool();
-      break;
-    case Object::Kind::String:
-      std::cout << a.asString()->view();
-      break;
-    }
-    std::cout << "\n";
+    std::cout << Object::ToRepr(a);
   }
+  std::cout << "\n";
   return Object::mkVoid({}); // in C apis printf actually returns the number
                              // of printed bytes, Python returns None
                              // i suppose we can decide that later

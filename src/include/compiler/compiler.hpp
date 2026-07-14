@@ -14,7 +14,7 @@
 namespace Anvil {
 
 struct ExprResult {
-  enum class Kind { Constant, Register, Jmp, Local /* Global, ... */ };
+  enum class Kind { Constant, Register, Jmp, Local, Global };
   Kind kind;
   uint32_t idx; // k-index or register, depending on kind
 };
@@ -26,20 +26,31 @@ struct Local {
   uint32_t depth;
 };
 
+struct FuncState {
+  Block block;
+  uint32_t next_reg = 0;
+  uint32_t max_regs = 0;
+  std::vector<Local> locals;
+  uint32_t depth = 0;
+};
+
 class Compiler {
   std::string_view source_;
   Ast ast_;
-  Block block_;
-  uint32_t next_reg_ = 0;
   StrPool strings_;
-  std::vector<Local> locals_;
-  uint32_t depth_ = 0;
   StringTable &str_table_;
+  std::vector<Proto> funcs_;
+  std::vector<StrPool::Index> globals_; // slot = vector index
+  uint32_t func_depth_ = 0;             // 0 = compiling main
+  Module module_;
+  FuncState fs_;
 
   void CompileRoot();
+  ExprResult CompileFuncProto(uint32_t stmt);
   ExprResult CompileExpressions(Node::ExtraRange range);
   ExprResult CompileExpression(uint32_t stmt);
   ExprResult CompileBuiltinCall(uint32_t node);
+  ExprResult CompileCall(uint32_t stmt);
   ExprResult CompileAssign(uint32_t stmt);
   ExprResult CompileReturnSimple(uint32_t stmt);
   ExprResult CompileIfSimple(uint32_t stmt);
@@ -58,6 +69,7 @@ class Compiler {
   double FloatFromToken(Node::TokenIndex token);
   std::optional<uint32_t> LookupNative(std::string_view name);
   uint32_t AllocateReg();
+  uint32_t BindGlobal(StrPool::Index name);
   void FreeReg(uint32_t keep);
   void FreeExpr(ExprResult e);
   uint32_t ExprToNextReg(ExprResult &e);
@@ -70,7 +82,7 @@ class Compiler {
 
 public:
   Compiler(std::string_view source, Ast ast, StringTable &str_table);
-  Block Compile();
+  Module Compile();
 };
 
 } // namespace Anvil

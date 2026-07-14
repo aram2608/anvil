@@ -41,7 +41,7 @@ static constexpr auto kKeyWords =
         {"if", Token::Kind::If},
         {"while", Token::Kind::While},
         {"for", Token::Kind::For},
-        {"proc", Token::Kind::FuncDecl},
+        {"fn", Token::Kind::FuncLiteral},
         {"else", Token::Kind::Else},
         {"return", Token::Kind::Return},
         {"true", Token::Kind::TrueLiteral},
@@ -189,6 +189,12 @@ void Anvil::DispatchLexCaret(Lexer &lex) { lex.PushToken(Token::Kind::Caret); }
 
 void Anvil::DispatchLexBar(Lexer &lex) { lex.PushToken(Token::Kind::Bar); }
 
+void Anvil::DispatchLexComment(Lexer &lex) {
+  while (!lex.IsEnd() && lex.Peek() != '\n') {
+    lex.Advance();
+  }
+}
+
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
 
@@ -224,6 +230,7 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table['^'] = &DispatchLexCaret;
   table['|'] = &DispatchLexBar;
   table['@'] = &DispatchLexAt;
+  table['/'] = &DispatchLexComment;
 
   for (unsigned char c = 'a'; c <= 'z'; ++c) {
     table[c] = &DispatchLexIdentifier;

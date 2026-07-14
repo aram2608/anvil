@@ -14,3 +14,13 @@ world := hello + "world";
 if hello == "hello" {
     @printf("yes");
 }
+
+// TODO:
+// Consider changing the syntax so that the last 
+// expression in a block is bare
+// { foo };
+add := fn(a, b) { a + b; };
+
+num := add(4, 5);
+
+@printf(num);

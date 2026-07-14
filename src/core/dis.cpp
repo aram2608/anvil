@@ -1,8 +1,15 @@
 #include "dis/dis.hpp"
+#include "compiler/block.hpp"
 #include "compiler/bytecode.hpp"
 #include <format>
 
 using namespace Anvil;
+
+void Dis::DisassembleModule(Module &mod) {
+  for (auto f : mod.funcs) {
+    Disassemble(f.block);
+  }
+}
 
 std::string Dis::Disassemble(const Block &block) {
   std::string out;

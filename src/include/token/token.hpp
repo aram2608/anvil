@@ -54,7 +54,7 @@ struct Token {
     Or,
     And,
 
-    FuncDecl,
+    FuncLiteral,
 
     LeftParen,
     RightParen,

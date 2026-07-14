@@ -20,6 +20,7 @@ enum class Kind : uint8_t {
   Float = 2,
   Bool = 3,
   String = 4,
+  Function = 5,
 };
 
 struct Void {};
@@ -52,6 +53,7 @@ struct Value {
     bool b;
     Void v;
     String *s;
+    uint32_t fidx;
   } as;
   Kind kind;
 
@@ -78,7 +80,13 @@ inline std::string ToRepr(const Value &v) {
   case Kind::Bool:
     return v.asBool() ? "true" : "false";
   case Kind::String:
-    return v.asString()->data();
+    return std::string{v.asString()->view()};
+  case Kind::Function:
+#ifndef NDEBUG
+    return "<fn#" + std::to_string(v.as.fidx) + ">";
+#else
+    return "<fn>";
+#endif
   }
 }
 
@@ -102,6 +110,11 @@ inline Value mkVoid(Void x) {
   return Value{.as = {.v = x}, .kind = Kind::Void};
 }
 
+inline Value mkFunction(uint32_t fidx) {
+  return Value{.as = {.fidx = fidx}, .kind = Kind::Function};
+}
+
+inline bool isFunction(const Value &v) { return v.kind == Kind::Function; }
 inline bool isBool(const Value &v) { return v.kind == Kind::Bool; }
 inline bool isInt(const Value &v) { return v.kind == Kind::Int; }
 inline bool isFloat(const Value &v) { return v.kind == Kind::Float; }
@@ -122,6 +135,8 @@ inline bool isZero(const Value &v) {
     return v.asString()->len == 0;
   case Kind::Void:
   case Kind::Bool:
+    return false;
+  case Kind::Function:
     return false;
   }
 }

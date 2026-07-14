@@ -41,7 +41,9 @@ class Parser {
   Node::Index ParseExpression();
   Node::Index ParseExpressionPrecedence(const int min);
   Node::Index ParsePrefix();
+  Node::Index ParsePostfix();
   Node::ExtraRange ParseParams();
+  Node::Index ParseProto();
   Node::Index ParseAtom();
   Node::TokenIndex Advance();
   Token::Kind Peek();
@@ -50,6 +52,8 @@ class Parser {
   void ExpectSemicolon(const size_t errs);
   Node::TokenIndex EatToken(Token::Kind);
   Node::ExtraIndex AddExtra(Node::IfExtra extra);
+  Node::ExtraIndex AddExtra(Node::ProtoExtra extra);
+  Node::ExtraIndex AddExtra(Node::CallExtra extra);
   void Synchronize();
 
 public:

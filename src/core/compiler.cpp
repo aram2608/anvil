@@ -6,6 +6,7 @@
 #include "utils/die.hpp"
 #include "vm/builtins.hpp"
 #include "vm/object.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cerrno>
 #include <charconv>
@@ -23,16 +24,23 @@ using namespace Anvil;
 Compiler::Compiler(std::string_view source, Ast ast, StringTable &str_table)
     : source_{source}, ast_{ast}, str_table_{str_table} {}
 
-Block Compiler::Compile() {
+Module Compiler::Compile() {
+  module_.funcs.emplace_back();
   CompileRoot();
-  return block_;
+  module_.funcs[0] = Proto{
+      .block = std::move(fs_.block),
+      .arity = 0,
+      .max_regs = static_cast<uint8_t>(fs_.max_regs), // narrows
+  };
+  module_.num_globals = static_cast<uint32_t>(globals_.size());
+  return std::move(module_);
 }
 
 void Compiler::CompileRoot() {
   auto root = ast_.Nodes().Datas()[0];
   auto range = std::get<Node::ExtraRange>(root);
   ExprResult v = CompileExpressions(range);
-  block_.PushInstruction(
+  fs_.block.PushInstruction(
       Code::CreateABCk(Code::Op::Ret, ExprToAnyReg(v), 2, 0));
 }
 
@@ -46,7 +54,7 @@ ExprResult Compiler::CompileExpressions(Node::ExtraRange range) {
   for (size_t i = 0; i < children.size() - 1; i++) {
     FreeExpr(CompileExpression(children[i]));
     // make sure the register shrinks with the locals
-    assert(next_reg_ == locals_.size());
+    assert(fs_.next_reg == fs_.locals.size());
   }
 
   return CompileExpression(children[children.size() - 1]);
@@ -56,6 +64,8 @@ ExprResult Compiler::CompileExpression(uint32_t stmt) {
   Node::Kind kind = ast_.Nodes().Kinds()[stmt];
 
   switch (kind) {
+  case Node::Kind::FuncProto:
+    return CompileFuncProto(stmt);
   case Node::Kind::Ident:
     return CompileIdent(stmt);
   case Node::Kind::Int:
@@ -89,11 +99,52 @@ ExprResult Compiler::CompileExpression(uint32_t stmt) {
     return CompileBlock(stmt);
   case Node::Kind::BuiltinCall:
     return CompileBuiltinCall(stmt);
+  case Node::Kind::Call:
+    return CompileCall(stmt);
   case Node::Kind::ReturnSimple:
     return CompileReturnSimple(stmt);
   default:
     DieLoudly("Unreachable at CompileExpression");
   }
+}
+
+ExprResult Compiler::CompileFuncProto(uint32_t proto) {
+  Node::Data data = ast_.Nodes().Datas()[proto];
+  Node::ExtraIndex extra = std::get<Node::ExtraIndex>(data);
+
+  uint32_t param_start = ast_.ExtraData()[ToU32(extra)];
+  uint32_t param_end = ast_.ExtraData()[ToU32(extra) + 1];
+  uint32_t block_idx = ast_.ExtraData()[ToU32(extra) + 2];
+
+  // Exchange the func state with a fresh one but store the enclosing
+  // state to rest back after parsing
+  FuncState enclosing = std::exchange(fs_, FuncState{});
+  func_depth_++;
+
+  for (uint32_t p : ast_.Children({param_start, param_end})) {
+    if (ast_.Nodes().Kinds()[p] != Node::Kind::Ident) {
+      DieLoudly("Function parameters must be identifiers");
+    }
+    Node::TokenIndex tok = ast_.Nodes().MainTokens()[p];
+    fs_.locals.push_back(
+        {strings_.InternOrGet(SliceFromToken(tok)), fs_.depth});
+  }
+  fs_.next_reg = fs_.max_regs = static_cast<uint32_t>(fs_.locals.size());
+
+  ExprResult body = CompileExpression(block_idx); // body
+  fs_.block.PushInstruction(
+      Code::CreateABCk(Code::Op::Ret, ExprToAnyReg(body), 2, 0));
+
+  uint32_t fidx = static_cast<uint32_t>(module_.funcs.size());
+  module_.funcs.push_back(Proto{
+      .block = std::move(fs_.block),
+      .arity = static_cast<uint8_t>(param_end - param_start),
+      .max_regs = static_cast<uint8_t>(fs_.max_regs),
+  });
+
+  func_depth_--;
+  fs_ = std::move(enclosing);
+  return EmitLoadK(Object::mkFunction(fidx));
 }
 
 ExprResult Compiler::CompileBuiltinCall(uint32_t call) {
@@ -110,7 +161,7 @@ ExprResult Compiler::CompileBuiltinCall(uint32_t call) {
     DieLoudly("Builtin function not found");
   }
 
-  uint32_t base = next_reg_; // args start here
+  uint32_t base = fs_.next_reg; // args start here
   for (size_t i = arg_range.start; i < arg_range.end; i++) {
     ExprResult arg = CompileExpression(ast_.ExtraData()[i]);
     ExprToNextReg(arg);
@@ -127,7 +178,26 @@ ExprResult Compiler::CompileBuiltinCall(uint32_t call) {
   }
 
   // CallB base, argc, idx
-  block_.PushInstruction(Code::CreateABCk(Code::Op::CallB, base, argc, idx));
+  fs_.block.PushInstruction(Code::CreateABCk(Code::Op::CallB, base, argc, idx));
+  FreeReg(base + 1);
+  return ExprResult{ExprResult::Kind::Register, base};
+}
+
+ExprResult Compiler::CompileCall(uint32_t call) {
+  Node::Data data = ast_.Nodes().Datas()[call];
+  auto [callee, extra] = std::get<Node::NodeAndExtra>(data);
+  uint32_t arg_start = ast_.ExtraData()[ToU32(extra)];
+  uint32_t arg_end = ast_.ExtraData()[ToU32(extra) + 1];
+
+  ExprResult f = CompileExpression(ToU32(callee));
+  uint32_t base = ExprToNextReg(f); // R[base] = function value
+  for (uint32_t a : ast_.Children({arg_start, arg_end})) {
+    ExprResult arg = CompileExpression(a);
+    ExprToNextReg(arg); // args at base+1 ..
+  }
+
+  fs_.block.PushInstruction(
+      Code::CreateABCk(Code::Op::Call, base, arg_end - arg_start, 0));
   FreeReg(base + 1);
   return ExprResult{ExprResult::Kind::Register, base};
 }
@@ -145,16 +215,36 @@ ExprResult Compiler::CompileAssign(uint32_t stmt) {
   Node::TokenIndex ident_tok = ast_.Nodes().MainTokens()[ident_idx];
   StrPool::Index string_idx = strings_.InternOrGet(SliceFromToken(ident_tok));
 
-  for (int i = static_cast<int>(locals_.size()) - 1; i >= 0; --i) {
-    if (locals_[i].idx == string_idx) {
+  for (int i = static_cast<int>(fs_.locals.size()) - 1; i >= 0; --i) {
+    if (fs_.locals[i].idx == string_idx) {
       DieLoudly("Cannot rebind variable, use `=` to mutate");
     }
   }
 
+  // global values
+  if (func_depth_ == 0 && fs_.depth == 0) {
+    uint32_t slot;
+    bool prebound =
+        ast_.Nodes().Kinds()[ToU32(assign.second)] == Node::Kind::FuncProto;
+    if (prebound) {
+      slot = BindGlobal(string_idx);
+    }
+
+    ExprResult rhs = CompileExpression(ToU32(assign.second));
+    uint32_t r = ExprToAnyReg(rhs);
+    if (!prebound) {
+      slot = BindGlobal(string_idx);
+    }
+
+    fs_.block.PushInstruction(Code::CreateABx(Code::Op::GSet, r, slot));
+    FreeExpr(rhs);
+    return {ExprResult::Kind::Global, slot};
+  }
+
   ExprResult rhs = CompileExpression(ToU32(assign.second));
   uint32_t slot = ExprToNextReg(rhs);
-  assert(slot == locals_.size());
-  locals_.push_back({.idx = string_idx, .depth = depth_});
+  assert(slot == fs_.locals.size());
+  fs_.locals.push_back({.idx = string_idx, .depth = fs_.depth});
   return {ExprResult::Kind::Local, slot};
 }
 
@@ -166,11 +256,11 @@ ExprResult Compiler::CompileIfFull(uint32_t stmt) {
   uint32_t then_expr = ast_.ExtraData()[extra];
   uint32_t else_expr = ast_.ExtraData()[extra + 1];
 
-  uint32_t base = next_reg_;
+  uint32_t base = fs_.next_reg;
 
   ExprResult cond = CompileExpression(ToU32(if_node.node));
   uint32_t rc = ExprToAnyReg(cond);
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, rc, 0, 0, 0));
+  fs_.block.PushInstruction(Code::CreateABCk(Code::Op::Test, rc, 0, 0, 0));
   uint32_t jmp_to_else = EmitJump();
 
   // Only one jump is possible so the branches can share registers
@@ -194,11 +284,11 @@ ExprResult Compiler::CompileIfSimple(uint32_t stmt) {
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::NodeAndNode if_node = std::get<Node::NodeAndNode>(data);
 
-  uint32_t base = next_reg_;
+  uint32_t base = fs_.next_reg;
 
   ExprResult cond = CompileExpression(ToU32(if_node.first));
   uint32_t rc = ExprToAnyReg(cond);
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Test, rc, 0, 0, 0));
+  fs_.block.PushInstruction(Code::CreateABCk(Code::Op::Test, rc, 0, 0, 0));
   uint32_t jmp_to_else = EmitJump();
 
   FreeReg(base);
@@ -223,21 +313,21 @@ ExprResult Compiler::CompileReturnSimple(uint32_t stmt) {
   // B = 0 -> dynamic result
   // B = 1 -> returns 0 values
   // B = 2 -> returns one value, in R[A]
-  block_.PushInstruction(Code::CreateABCk(Code::Op::Ret, v.idx, 2, 0));
+  fs_.block.PushInstruction(Code::CreateABCk(Code::Op::Ret, v.idx, 2, 0));
   return ExprResult{ExprResult::Kind::Register, v.idx};
 }
 
 ExprResult Compiler::CompileBlock(uint32_t stmt) {
   // Blocks are expressions so the last value needs to leave it's
   // value on the stack
-  uint32_t base = next_reg_;
+  uint32_t base = fs_.next_reg;
   EnterScope();
   Node::Data data = ast_.Nodes().Datas()[stmt];
   Node::ExtraRange range = std::get<Node::ExtraRange>(data);
   ExprResult result = CompileExpressions(range);
   DischargeToReg(result, base);
   ExitScope();
-  next_reg_ = base + 1; // the next register is after this blocks value
+  fs_.next_reg = base + 1; // the next register is after this blocks value
   return ExprResult{ExprResult::Kind::Register, base};
 }
 
@@ -277,7 +367,7 @@ ExprResult Compiler::CompileBinOp(Node::Kind kind, uint32_t expr) {
   uint32_t dst = AllocateReg();
 
   Code::Inst inst = Code::CreateABCk(MapNodeToOp(kind), dst, rl, rr);
-  block_.PushInstruction(inst);
+  fs_.block.PushInstruction(inst);
 
   return ExprResult{ExprResult::Kind::Register, dst};
 }
@@ -288,11 +378,20 @@ ExprResult Compiler::CompileIdent(uint32_t stmt) {
 
   if (!string_idx.has_value()) DieLoudly("Undefined variable");
 
-  for (int i = static_cast<int>(locals_.size()) - 1; i >= 0; --i) {
-    if (locals_[i].idx == string_idx.value()) {
+  for (int i = static_cast<int>(fs_.locals.size()) - 1; i >= 0; --i) {
+    if (fs_.locals[i].idx == string_idx.value()) {
       // locals_[i] lives in register i
       return ExprResult{ExprResult::Kind::Local, static_cast<uint32_t>(i)};
     }
+  }
+
+  auto it = std::find(globals_.begin(), globals_.end(), string_idx.value());
+
+  if (it != globals_.end()) {
+    return ExprResult{
+        ExprResult::Kind::Global,
+        static_cast<uint32_t>(it - globals_.begin()),
+    };
   }
   DieLoudly("Undefined variable"); // TODO: real error reporting
 }
@@ -328,9 +427,9 @@ ExprResult Compiler::CompileFalse(uint32_t stmt) {
 }
 
 ExprResult Compiler::EmitLoadK(Object::Value v) {
-  block_.PushConstant(v);
+  fs_.block.PushConstant(v);
 
-  uint32_t const_index = block_.ConstantsSize() - 1;
+  uint32_t const_index = fs_.block.ConstantsSize() - 1;
 
   return ExprResult{ExprResult::Kind::Constant, const_index};
 }
@@ -341,14 +440,17 @@ std::string_view Compiler::SliceFromToken(Node::TokenIndex token) {
   return source_.substr(start, len);
 }
 
-uint32_t Compiler::AllocateReg() { return next_reg_++; }
+uint32_t Compiler::AllocateReg() {
+  fs_.max_regs = std::max(fs_.max_regs, fs_.next_reg + 1);
+  return fs_.next_reg++;
+}
 
-void Compiler::FreeReg(uint32_t keep) { next_reg_ = keep; }
+void Compiler::FreeReg(uint32_t keep) { fs_.next_reg = keep; }
 
 void Compiler::FreeExpr(ExprResult e) {
-  if (e.kind == ExprResult::Kind::Register && e.idx >= locals_.size()) {
-    assert(e.idx == next_reg_ - 1);
-    next_reg_--;
+  if (e.kind == ExprResult::Kind::Register && e.idx >= fs_.locals.size()) {
+    assert(e.idx == fs_.next_reg - 1);
+    fs_.next_reg--;
   }
 }
 
@@ -359,15 +461,19 @@ void Compiler::DischargeToReg(ExprResult e, uint32_t reg) {
   case ExprResult::Kind::Local:
   case ExprResult::Kind::Register:
     if (e.idx != reg)
-      block_.PushInstruction(Code::CreateABCk(Code::Op::Move, reg, e.idx, 0));
+      fs_.block.PushInstruction(
+          Code::CreateABCk(Code::Op::Move, reg, e.idx, 0));
     break;
   // constants get pushed irregardles
   case ExprResult::Kind::Constant:
-    block_.PushInstruction(Code::CreateABx(Code::Op::LoadK, reg, e.idx));
+    fs_.block.PushInstruction(Code::CreateABx(Code::Op::LoadK, reg, e.idx));
     break;
   // Jmps need to be patched
   case ExprResult::Kind::Jmp:
     DieLoudly("unimplemented");
+  case ExprResult::Kind::Global:
+    fs_.block.PushInstruction(Code::CreateABx(Code::Op::GGet, reg, e.idx));
+    break;
   }
 }
 
@@ -388,24 +494,25 @@ uint32_t Compiler::ExprToAnyReg(ExprResult &e) {
 }
 
 uint32_t Compiler::EmitJump() {
-  block_.PushInstruction(Code::CreatesJ(Code::Op::Jmp, 0));
-  return block_.OpcodesSize() - 1;
+  fs_.block.PushInstruction(Code::CreatesJ(Code::Op::Jmp, 0));
+  return fs_.block.OpcodesSize() - 1;
 }
 
 void Compiler::PatchJumpToHere(uint32_t jump_idx) {
   // Offsets are signed
-  int32_t offset = static_cast<int32_t>(block_.OpcodesSize() - (jump_idx + 1));
-  Code::SetsJ(block_.InstAt(jump_idx), offset);
+  int32_t offset =
+      static_cast<int32_t>(fs_.block.OpcodesSize() - (jump_idx + 1));
+  Code::SetsJ(fs_.block.InstAt(jump_idx), offset);
 }
 
-void Compiler::EnterScope() { depth_++; }
+void Compiler::EnterScope() { fs_.depth++; }
 
 void Compiler::ExitScope() {
-  depth_--;
-  while (!locals_.empty() && locals_.back().depth > depth_) {
-    locals_.pop_back();
+  fs_.depth--;
+  while (!fs_.locals.empty() && fs_.locals.back().depth > fs_.depth) {
+    fs_.locals.pop_back();
   }
-  next_reg_ = static_cast<uint32_t>(locals_.size());
+  fs_.next_reg = static_cast<uint32_t>(fs_.locals.size());
 }
 
 int64_t Compiler::IntFromToken(Node::TokenIndex token) {
@@ -462,4 +569,9 @@ std::optional<uint32_t> Compiler::LookupNative(std::string_view name) {
     if (name == kNatives[i].name) return i;
   }
   return std::nullopt;
+}
+
+uint32_t Compiler::BindGlobal(StrPool::Index name) {
+  globals_.push_back(name);
+  return static_cast<uint32_t>(globals_.size() - 1);
 }

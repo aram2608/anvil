@@ -44,6 +44,7 @@ struct Node {
   using Data = std::variant<
     Index,         // node
     TokenIndex,    // token
+    ExtraIndex,    // extra_idx
     NodeAndNode,   // node_and_node
     TokenAndNode,  // token_and_node
     TokenAndToken, // token_and_token
@@ -53,8 +54,9 @@ struct Node {
     >;
   // clang-format on
 
-  enum class Kind {
+  enum class Kind : uint8_t {
     Root,
+    FuncProto,
     IfSimple,
     IfFull,
     ReturnSimple,
@@ -73,6 +75,7 @@ struct Node {
     Reassign,
     Assign,
     BuiltinCall,
+    Call,
     Equal,
     NotEqual,
     LesserThan,
@@ -94,11 +97,22 @@ struct Node {
   TokenIndex main_token;
   Data data;
 
+  struct ProtoExtra {
+    ExtraRange params;
+    Index block;
+  };
+
   struct IfExtra {
     Index then_expr;
     Index else_expr;
   };
+
+  struct CallExtra {
+    ExtraRange argc;
+  };
 };
+
+static_assert(sizeof(Node) <= 20);
 
 } // namespace Anvil
 

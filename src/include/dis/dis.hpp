@@ -6,8 +6,9 @@
 namespace Anvil {
 
 namespace Dis {
+void DisassembleModule(Module &mod);
 std::string Disassemble(const Block &block);
-}
+} // namespace Dis
 
 } // namespace Anvil
 

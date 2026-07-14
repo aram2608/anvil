@@ -1,4 +1,4 @@
-proc fib(r) {
+fib := fn(r) {
   if r <= 1 {
     return r;
   }

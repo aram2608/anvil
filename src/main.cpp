@@ -1,4 +1,5 @@
 #include "ast/ast.hpp"
+#include "compiler/block.hpp"
 #include "compiler/compiler.hpp"
 #include "dis/dis.hpp"
 #include "lexer/lexer.hpp"
@@ -35,9 +36,9 @@ int main(int argc, char **argv) {
         return 1;
       }
       Anvil::Compiler c{source, ast, global_strings};
-      Anvil::Block b = c.Compile();
+      Anvil::Module m = c.Compile();
       // std::cout << Anvil::Dis::Disassemble(b);
-      Anvil::VM vm{b, global_strings};
+      Anvil::VM vm{m, global_strings};
       vm.Run();
     } else {
       std::cout << argv[1] << " could not be opened\n";

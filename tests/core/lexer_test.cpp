@@ -61,14 +61,15 @@ TEST(Lexer, LexAssignBinops) {
 }
 
 TEST(Lexer, LexIdents) {
-  ExpectKinds("foo if else while for", {
-                                           Token::Kind::Identifier,
-                                           Token::Kind::If,
-                                           Token::Kind::Else,
-                                           Token::Kind::While,
-                                           Token::Kind::For,
-                                           Token::Kind::EndOfFile,
-                                       });
+  ExpectKinds("foo if else while fn for", {
+                                              Token::Kind::Identifier,
+                                              Token::Kind::If,
+                                              Token::Kind::Else,
+                                              Token::Kind::While,
+                                              Token::Kind::FuncLiteral,
+                                              Token::Kind::For,
+                                              Token::Kind::EndOfFile,
+                                          });
 }
 
 TEST(Lexer, LexNumbers) {

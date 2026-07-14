@@ -25,6 +25,17 @@ public:
   Code::Inst &InstAt(uint32_t idx) { return code_[idx]; }
 };
 
+struct Proto {
+  Block block;
+  uint8_t arity;
+  uint8_t max_regs;
+};
+
+struct Module {
+  uint32_t num_globals;
+  std::vector<Proto> funcs;
+};
+
 } // namespace Anvil
 
 #endif
