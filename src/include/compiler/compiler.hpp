@@ -52,7 +52,9 @@ class Compiler {
   ExprResult CompileBuiltinCall(uint32_t node);
   ExprResult CompileCall(uint32_t stmt);
   ExprResult CompileAssign(uint32_t stmt);
+  ExprResult CompileReassign(uint32_t stmt);
   ExprResult CompileReturnSimple(uint32_t stmt);
+  ExprResult CompileForNumeric(uint32_t stmt);
   ExprResult CompileIfSimple(uint32_t stmt);
   ExprResult CompileIfFull(uint32_t stmt);
   ExprResult CompileBlock(uint32_t stmt);
@@ -75,6 +77,7 @@ class Compiler {
   uint32_t ExprToNextReg(ExprResult &e);
   uint32_t ExprToAnyReg(ExprResult &e);
   void DischargeToReg(ExprResult e, uint32_t reg);
+  void EmitJumpTo(uint32_t target);
   uint32_t EmitJump();
   void PatchJumpToHere(uint32_t jump_idx);
   void EnterScope();

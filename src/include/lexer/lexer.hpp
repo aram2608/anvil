@@ -63,7 +63,6 @@ public:
   friend void DispatchLexCaret(Lexer &lex);
   friend void DispatchLexBar(Lexer &lex);
   friend void DispatchLexAt(Lexer &lex);
-  friend void DispatchLexComment(Lexer &lex);
 };
 
 } // namespace Anvil

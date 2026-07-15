@@ -37,6 +37,7 @@ class Parser {
   Node::Index ParseBlock();
   Node::Index ParseReturn();
   Node::Index ParseIf();
+  Node::Index ParseForNumeric();
   Node::Index ParseExpressionStatement();
   Node::Index ParseExpression();
   Node::Index ParseExpressionPrecedence(const int min);
@@ -54,6 +55,7 @@ class Parser {
   Node::ExtraIndex AddExtra(Node::IfExtra extra);
   Node::ExtraIndex AddExtra(Node::ProtoExtra extra);
   Node::ExtraIndex AddExtra(Node::CallExtra extra);
+  Node::ExtraIndex AddExtra(Node::ForNumericExtra extra);
   void Synchronize();
 
 public:

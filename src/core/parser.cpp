@@ -105,6 +105,8 @@ Node::Index Parser::ParseStatements() {
     return ParseIf();
   case Token::Kind::Return:
     return ParseReturn();
+  case Token::Kind::For:
+    return ParseForNumeric();
   default:
     return ParseExpressionStatement();
   }
@@ -170,6 +172,28 @@ Node::Index Parser::ParseReturn() {
       .kind = Node::Kind::ReturnSimple,
       .main_token = return_token,
       .data = expr,
+  });
+}
+
+// for_stmt <- KEYWORD_FOR expr SEMICOLON expr SEMICOLON expr SEMICOLON block
+Node::Index Parser::ParseForNumeric() {
+  Node::TokenIndex for_token = EatToken(Token::Kind::For);
+  auto errs = errors_.size();
+  Node::Index init = ParseExpression();
+  ExpectSemicolon(errs);
+  Node::Index cond = ParseExpression();
+  ExpectSemicolon(errs);
+  Node::Index step = ParseExpression();
+  Node::Index block = ParseBlock();
+  return AddNode({
+      .kind = Node::Kind::ForNumeric,
+      .main_token = for_token,
+      .data = AddExtra(Node::ForNumericExtra{
+          .init = init,
+          .cond = cond,
+          .step = step,
+          .body = block,
+      }),
   });
 }
 
@@ -510,6 +534,18 @@ Node::ExtraIndex Parser::AddExtra(Node::CallExtra extra) {
   // Serialized start then end
   PushExtraValue(extra.argc.start);
   PushExtraValue(extra.argc.end);
+
+  return Node::ExtraIndex{result};
+}
+
+Node::ExtraIndex Parser::AddExtra(Node::ForNumericExtra extra) {
+  uint32_t result = static_cast<uint32_t>(extra_data_.size());
+
+  // Init -> cond -> step {}
+  PushExtraValue(extra.init);
+  PushExtraValue(extra.cond);
+  PushExtraValue(extra.step);
+  PushExtraValue(extra.body);
 
   return Node::ExtraIndex{result};
 }

@@ -69,7 +69,13 @@ using DispatchTableT = std::array<DispatchFunctionT *, 256>;
 void Anvil::DispatchLexError(Lexer &lex) { lex.PushToken(Token::Kind::Error); }
 
 void Anvil::DispatchLexSlash(Lexer &lex) {
-  lex.OpAssign(Token::Kind::SlashEqual, Token::Kind::Slash);
+  if (lex.Peek() == '/') {
+    while (!lex.IsEnd() && lex.Peek() != '\n') {
+      lex.Advance();
+    }
+  } else {
+    lex.OpAssign(Token::Kind::SlashEqual, Token::Kind::Slash);
+  }
 }
 
 void Anvil::DispatchLexPlus(Lexer &lex) {
@@ -189,12 +195,6 @@ void Anvil::DispatchLexCaret(Lexer &lex) { lex.PushToken(Token::Kind::Caret); }
 
 void Anvil::DispatchLexBar(Lexer &lex) { lex.PushToken(Token::Kind::Bar); }
 
-void Anvil::DispatchLexComment(Lexer &lex) {
-  while (!lex.IsEnd() && lex.Peek() != '\n') {
-    lex.Advance();
-  }
-}
-
 static constexpr DispatchTableT kDispatchTable = [] {
   DispatchTableT table{};
 
@@ -230,7 +230,6 @@ static constexpr DispatchTableT kDispatchTable = [] {
   table['^'] = &DispatchLexCaret;
   table['|'] = &DispatchLexBar;
   table['@'] = &DispatchLexAt;
-  table['/'] = &DispatchLexComment;
 
   for (unsigned char c = 'a'; c <= 'z'; ++c) {
     table[c] = &DispatchLexIdentifier;

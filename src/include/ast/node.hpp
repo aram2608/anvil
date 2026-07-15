@@ -1,5 +1,6 @@
 #ifndef NODE_HPP_
 #define NODE_HPP_
+
 #include <cstdint>
 #include <variant>
 
@@ -59,6 +60,7 @@ struct Node {
     FuncProto,
     IfSimple,
     IfFull,
+    ForNumeric,
     ReturnSimple,
     ReturnMulti,
     Ident,
@@ -109,6 +111,13 @@ struct Node {
 
   struct CallExtra {
     ExtraRange argc;
+  };
+
+  struct ForNumericExtra {
+    Index init;
+    Index cond;
+    Index step;
+    Index body;
   };
 };
 

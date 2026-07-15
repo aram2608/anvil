@@ -76,6 +76,8 @@ ExprResult Compiler::CompileExpression(uint32_t stmt) {
     return CompileStringLiteral(stmt);
   case Node::Kind::Assign:
     return CompileAssign(stmt);
+  case Node::Kind::Reassign:
+    return CompileReassign(stmt);
   case Node::Kind::True:
     return CompileTrue(stmt);
   case Node::Kind::False:
@@ -103,6 +105,8 @@ ExprResult Compiler::CompileExpression(uint32_t stmt) {
     return CompileCall(stmt);
   case Node::Kind::ReturnSimple:
     return CompileReturnSimple(stmt);
+  case Node::Kind::ForNumeric:
+    return CompileForNumeric(stmt);
   default:
     DieLoudly("Unreachable at CompileExpression");
   }
@@ -246,6 +250,91 @@ ExprResult Compiler::CompileAssign(uint32_t stmt) {
   assert(slot == fs_.locals.size());
   fs_.locals.push_back({.idx = string_idx, .depth = fs_.depth});
   return {ExprResult::Kind::Local, slot};
+}
+
+ExprResult Compiler::CompileReassign(uint32_t stmt) {
+  Node::NodeAndNode re =
+      std::get<Node::NodeAndNode>(ast_.Nodes().Datas()[stmt]);
+  uint32_t ident_idx = ToU32(re.first);
+
+  if (ast_.Nodes().Kinds()[ident_idx] != Node::Kind::Ident)
+    DieLoudly("TODO: assignment target must be an identifier");
+
+  Node::TokenIndex tok = ast_.Nodes().MainTokens()[ident_idx];
+  StrPool::Index name = strings_.InternOrGet(SliceFromToken(tok));
+
+  // local? (search inner-to-outer; local lives in register == its index)
+  for (int i = static_cast<int>(fs_.locals.size()) - 1; i >= 0; --i) {
+    if (fs_.locals[i].idx == name) {
+      uint32_t slot = static_cast<uint32_t>(i);
+      ExprResult rhs = CompileExpression(ToU32(re.second));
+      DischargeToReg(rhs, slot); // Move / LoadK / GGet into the local
+      FreeExpr(rhs);
+      fs_.next_reg = fs_.locals.size(); // drop any temp above the locals
+      return ExprResult{ExprResult::Kind::Local, slot};
+    }
+  }
+
+  // global?
+  auto it = std::find(globals_.begin(), globals_.end(), name);
+  if (it != globals_.end()) {
+    uint32_t slot = static_cast<uint32_t>(it - globals_.begin());
+    ExprResult rhs = CompileExpression(ToU32(re.second));
+    uint32_t r = ExprToAnyReg(rhs);
+    fs_.block.PushInstruction(Code::CreateABx(Code::Op::GSet, r, slot));
+    FreeExpr(rhs);
+    return ExprResult{ExprResult::Kind::Global, slot};
+  }
+
+  DieLoudly("Cannot assign to undeclared variable"); // TODO: real error
+}
+
+ExprResult Compiler::CompileForNumeric(uint32_t stmt) {
+  Node::ExtraIndex extra =
+      std::get<Node::ExtraIndex>(ast_.Nodes().Datas()[stmt]);
+  uint32_t e = ToU32(extra);
+  uint32_t init = ast_.ExtraData()[e + 0];
+  uint32_t cond = ast_.ExtraData()[e + 1];
+  uint32_t step = ast_.ExtraData()[e + 2];
+  uint32_t body = ast_.ExtraData()[e + 3];
+
+  uint32_t base = fs_.next_reg;
+
+  // loops get their own scope
+  EnterScope();
+  FreeExpr(CompileExpression(init));
+
+  uint32_t enter = EmitJump(); // jump forward to the cond test
+  uint32_t top = fs_.block.OpcodesSize();
+
+  // body + step (values discarded each iteration)
+  fs_.next_reg = fs_.locals.size(); // reset temps before the body
+  FreeExpr(CompileExpression(body));
+  fs_.next_reg = fs_.locals.size();
+  FreeExpr(CompileExpression(step));
+
+  // cond test
+  PatchJumpToHere(enter);
+  ExprResult c = CompileExpression(cond);
+  uint32_t rc = ExprToAnyReg(c);
+  fs_.block.PushInstruction(
+      Code::CreateABCk(Code::Op::Test, rc, 0, 0, 1)); // k=1 to jump out
+  EmitJumpTo(top);
+  FreeExpr(c);
+
+  ExitScope();
+
+  // push a synthetic Void value, later we can maybe use a Zig style
+  // labeled block for breaks or some other syntax
+  // x := blk: for i := 0; i < 10; i += 1 {
+  //      if i == 3 {
+  //         break :blk 3;
+  //      }
+  // }
+  fs_.next_reg = base;
+  DischargeToReg(EmitLoadK(Object::mkVoid({})), base);
+  fs_.next_reg = base + 1;
+  return ExprResult{ExprResult::Kind::Register, base};
 }
 
 ExprResult Compiler::CompileIfFull(uint32_t stmt) {
@@ -496,6 +585,13 @@ uint32_t Compiler::ExprToAnyReg(ExprResult &e) {
 uint32_t Compiler::EmitJump() {
   fs_.block.PushInstruction(Code::CreatesJ(Code::Op::Jmp, 0));
   return fs_.block.OpcodesSize() - 1;
+}
+
+void Compiler::EmitJumpTo(uint32_t target) {
+  // signed offset
+  int32_t offset = static_cast<int32_t>(target) -
+                   static_cast<int32_t>(fs_.block.OpcodesSize() + 1);
+  fs_.block.PushInstruction(Code::CreatesJ(Code::Op::Jmp, offset));
 }
 
 void Compiler::PatchJumpToHere(uint32_t jump_idx) {
